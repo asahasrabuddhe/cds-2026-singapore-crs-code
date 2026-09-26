@@ -1,0 +1,74 @@
+#cloud-config
+#
+# One provisioning file for every VM the runtime runs in. Multipass on
+# Windows, macOS and Linux, OrbStack on a Mac, and Lima all accept it
+# unchanged, so the box you rehearse on and the box an attendee builds are
+# the same box.
+#
+#   multipass launch 24.04 --name crs --cloud-init provision/user-data.yaml
+#   orb create -c provision/user-data.yaml ubuntu:noble crs
+#
+# Ubuntu 24.04 is the target. Debian 13 works with the same file, the only
+# difference is which sysctl guards user namespaces, and both are written.
+
+package_update: true
+package_upgrade: false
+
+packages:
+  # busybox-static is a whole userland in one binary. scripts/rootfs.sh
+  # turns it into a 1.2 MB root filesystem in under a second, with no
+  # registry, no image and no network, which is what a workshop room needs.
+  - busybox-static
+  # newuidmap and newgidmap, for the rootless path.
+  - uidmap
+  # strace shows the room the syscalls the runtime makes. `strace -f -e
+  # trace=clone,clone3,unshare,mount,pivot_root,prctl` is the honest view.
+  - strace
+  - curl
+  - ca-certificates
+  - git
+  - make
+  - tmux
+
+write_files:
+  # Both sysctls, because the two distributions guard user namespaces
+  # differently. Ubuntu 23.10 and later ship an AppArmor allowlist that
+  # refuses a user namespace to any binary without a profile, which includes
+  # every program built in this workshop. Debian has the older on/off
+  # switch, on by default since Debian 11. Writing both is harmless: sysctl
+  # skips a key the running kernel does not have.
+  - path: /etc/sysctl.d/99-crs.conf
+    content: |
+      # Required by the rootless path of the container runtime workshop.
+      # Ubuntu ships the first as 1. See docs/setup.md for what it guards.
+      kernel.apparmor_restrict_unprivileged_userns = 0
+      kernel.unprivileged_userns_clone = 1
+
+  # Delegate the cgroup controllers to the user's systemd slice, so the
+  # rootless path can create a cgroup and set limits in it. Ubuntu already
+  # delegates cpu, memory and pids; Debian does not, so say it explicitly.
+  - path: /etc/systemd/system/user@.service.d/delegate.conf
+    content: |
+      [Service]
+      Delegate=cpu cpuset io memory pids
+
+  - path: /etc/profile.d/go.sh
+    content: |
+      export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin
+
+runcmd:
+  - sysctl -e --system
+  - systemctl daemon-reload
+  # Go, from go.dev rather than apt, because apt's Go trails by a year and
+  # the code targets the current release. The architecture is detected so
+  # the same file provisions an arm64 Mac and an amd64 laptop.
+  - |
+    set -e
+    GO_VERSION=1.27.1
+    ARCH="$(dpkg --print-architecture)"
+    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${ARCH}.tar.gz" -o /tmp/go.tgz
+    rm -rf /usr/local/go
+    tar -C /usr/local -xzf /tmp/go.tgz
+    rm -f /tmp/go.tgz
+    /usr/local/go/bin/go version > /etc/crs-provisioned
+  - 'echo "crs: provisioning complete" >> /etc/crs-provisioned'

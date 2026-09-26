@@ -1,0 +1,8 @@
+# Build output. Anchored, because an unanchored name also matches the
+# cmd/ source directory of the same name.
+/mycontainer
+/img2rootfs
+
+# Root filesystems built by scripts/rootfs.sh or cmd/img2rootfs. Large,
+# and rebuilt in seconds.
+/rootfs/

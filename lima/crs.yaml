@@ -1,0 +1,52 @@
+# A Lima definition, for people on a Mac who already have Lima. It uses the
+# same cloud-init file as Multipass and OrbStack, so the box is the same.
+#
+#   limactl start --name crs lima/crs.yaml
+#   limactl shell crs
+#
+# The repository is mounted read-write at the same path as on the host.
+
+images:
+  - location: "https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-arm64.img"
+    arch: "aarch64"
+  - location: "https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-amd64.img"
+    arch: "x86_64"
+
+cpus: 2
+memory: "4GiB"
+disk: "20GiB"
+
+mounts:
+  - location: "~"
+    writable: true
+
+# Lima runs cloud-init itself and ignores user-data in the image, so the
+# provisioning file is applied as a system script instead. Same file.
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -e
+      cloud-init --version >/dev/null 2>&1 || apt-get install -y cloud-init
+      cp /tmp/lima/../../provision/user-data.yaml /var/lib/cloud/seed/nocloud/user-data 2>/dev/null || true
+      # The reliable path: run the file's steps directly.
+      apt-get update -qq
+      apt-get install -y -qq busybox-static uidmap strace curl ca-certificates git make tmux
+      printf 'kernel.apparmor_restrict_unprivileged_userns = 0\nkernel.unprivileged_userns_clone = 1\n' > /etc/sysctl.d/99-crs.conf
+      sysctl -e --system
+      mkdir -p /etc/systemd/system/user@.service.d
+      printf '[Service]\nDelegate=cpu cpuset io memory pids\n' > /etc/systemd/system/user@.service.d/delegate.conf
+      systemctl daemon-reload
+      GO_VERSION=1.27.1
+      ARCH="$(dpkg --print-architecture)"
+      curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${ARCH}.tar.gz" -o /tmp/go.tgz
+      rm -rf /usr/local/go && tar -C /usr/local -xzf /tmp/go.tgz && rm -f /tmp/go.tgz
+      echo 'export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin' > /etc/profile.d/go.sh
+      /usr/local/go/bin/go version > /etc/crs-provisioned
+      echo "crs: provisioning complete" >> /etc/crs-provisioned
+
+probes:
+  - script: |
+      #!/bin/bash
+      until test -f /etc/crs-provisioned; do sleep 3; done
+    hint: "provisioning has not finished; see /var/log/cloud-init-output.log in the VM"
