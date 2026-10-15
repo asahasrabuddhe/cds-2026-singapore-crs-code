@@ -38,7 +38,7 @@ host with `ps`, which sees the container's processes with their real
 state. By hand, in two terminals:
 
 ```console
-$ sudo ./mycontainer run -init=false rootfs/busybox /bin/sh -c 'sh -c "sleep 0.3 &"; exec sleep 30'
+$ sudo ./mycontainer run -init=false ubuntu /bin/sh -c 'sh -c "sleep 0.3 &"; exec sleep 30'
 # ...in the other:
 $ ps -eo pid,ppid,stat,comm | grep -E 'sleep|Z'
 $ sudo kill -TERM <pid of sleep>          # nothing happens
@@ -46,11 +46,10 @@ $ sudo kill -TERM <pid of sleep>          # nothing happens
 
 ## Expected output
 
-Without init, `ps` shows `sleep` as the container's PID 1 and under it a
-`sh` in state `Z`, the background job's shell, orphaned onto PID 1 and
-never collected. (busybox runs `sleep` inside the forked shell rather than
-exec'ing it, hence the name.) SIGTERM to that `sleep` does nothing; it is
-still there a second later.
+Without init, `ps` shows `sleep` as the container's PID 1 and under it
+another `sleep` in state `Z`: the background job, orphaned onto PID 1 when
+its shell exited, then exited itself and never collected. SIGTERM to the
+`sleep` that is PID 1 does nothing; it is still there a second later.
 
 With init, `ps` shows `exe` as PID 1, `sleep` under it, and no zombie.
 SIGTERM to PID 1 is forwarded to `sleep`, which dies of it, and the

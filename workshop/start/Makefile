@@ -9,6 +9,8 @@
 #   go test ./internal/cgroup/        step 3
 #   go test ./internal/caps/          step 4
 #   go test ./internal/initproc/      step 5, Linux only
+#
+# workshop/stub.py rebuilds this directory from the finished runtime.
 
 build:
 	go build -o mycontainer ./cmd/mycontainer
@@ -16,8 +18,11 @@ build:
 test:
 	go test ./...
 
+# The image lives once, in the repository's own rootfs/, pulled by the
+# pre-flight. This links it here, so `mycontainer run ubuntu` finds it.
 rootfs:
-	../../scripts/rootfs.sh rootfs/busybox
+	@test -d ../../rootfs/ubuntu || $(MAKE) -C ../.. rootfs
+	ln -sfn ../../rootfs rootfs
 
 check:
 	go vet ./...

@@ -132,23 +132,23 @@ func TestApplyLayerExtractsFilesDirsAndSymlinks(t *testing.T) {
 	dest := t.TempDir()
 	layer := makeTar(t,
 		entry{name: "bin/"},
-		entry{name: "bin/busybox", mode: 0o755, content: "ELF"},
-		entry{name: "bin/sh", typ: tar.TypeSymlink, link: "busybox"},
+		entry{name: "bin/dash", mode: 0o755, content: "ELF"},
+		entry{name: "bin/sh", typ: tar.TypeSymlink, link: "dash"},
 		entry{name: "etc/passwd", content: "root:x:0:0\n"},
-		entry{name: "bin/ls", typ: tar.TypeLink, link: "bin/busybox"},
+		entry{name: "bin/ls", typ: tar.TypeLink, link: "bin/dash"},
 	)
 	if err := ApplyLayer(dest, bytes.NewReader(layer)); err != nil {
 		t.Fatal(err)
 	}
 
-	if got := readFile(t, filepath.Join(dest, "bin", "busybox")); got != "ELF" {
-		t.Errorf("busybox = %q", got)
+	if got := readFile(t, filepath.Join(dest, "bin", "dash")); got != "ELF" {
+		t.Errorf("dash = %q", got)
 	}
-	info, err := os.Stat(filepath.Join(dest, "bin", "busybox"))
+	info, err := os.Stat(filepath.Join(dest, "bin", "dash"))
 	if err != nil || info.Mode().Perm() != 0o755 {
-		t.Errorf("busybox mode = %v, err %v", info.Mode(), err)
+		t.Errorf("dash mode = %v, err %v", info.Mode(), err)
 	}
-	if link, _ := os.Readlink(filepath.Join(dest, "bin", "sh")); link != "busybox" {
+	if link, _ := os.Readlink(filepath.Join(dest, "bin", "sh")); link != "dash" {
 		t.Errorf("sh -> %q", link)
 	}
 	// etc/ was never listed as a directory entry; it still has to exist.
@@ -298,7 +298,7 @@ func fakeRegistry(t *testing.T, repo string) (*httptest.Server, map[string]blob,
 		return d
 	}
 
-	layer1 := gzipped(t, makeTar(t, entry{name: "bin/"}, entry{name: "bin/busybox", mode: 0o755, content: "ELF"}, entry{name: "etc/old", content: "old"}))
+	layer1 := gzipped(t, makeTar(t, entry{name: "bin/"}, entry{name: "bin/dash", mode: 0o755, content: "ELF"}, entry{name: "etc/old", content: "old"}))
 	layer2 := gzipped(t, makeTar(t, entry{name: "etc/.wh.old"}, entry{name: "etc/new", content: "new"}))
 
 	manifestFor := func(arch string) string {
@@ -385,8 +385,8 @@ func TestPullUnpacksTheRightPlatform(t *testing.T) {
 		t.Fatalf("Pull: %v\n%s", log.String(), err)
 	}
 
-	if got := readFile(t, filepath.Join(dest, "bin", "busybox")); got != "ELF" {
-		t.Errorf("busybox = %q", got)
+	if got := readFile(t, filepath.Join(dest, "bin", "dash")); got != "ELF" {
+		t.Errorf("dash = %q", got)
 	}
 	if exists(filepath.Join(dest, "etc", "old")) {
 		t.Error("layer 2's whiteout was not applied")

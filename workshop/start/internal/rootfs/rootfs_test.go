@@ -127,9 +127,8 @@ func TestPivotSequence(t *testing.T) {
 
 func TestPivotPreparesTheFilesystemBeforeMounting(t *testing.T) {
 	dir := newRootfs(t)
-	// No /proc or /dev in this rootfs at all: an image built by hand from
-	// busybox has neither. Pivot must create them rather than fail on the
-	// mount.
+	// No /proc or /dev in this rootfs at all, as in one assembled by hand.
+	// Pivot must create them rather than fail on the mount.
 	_ = os.Remove(filepath.Join(dir, "proc"))
 	_ = os.Remove(filepath.Join(dir, "dev"))
 

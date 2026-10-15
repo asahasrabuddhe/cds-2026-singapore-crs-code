@@ -128,22 +128,34 @@ func TestParseRunNoHostnameWithoutUTS(t *testing.T) {
 	}
 }
 
-func TestParseRunRelativeRootfsBecomesAbsolute(t *testing.T) {
+func TestParseRunResolvesTheRootfs(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
+	t.Chdir(dir)
+	for _, d := range []string{"rootfs/ubuntu", "mine"} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err := os.Mkdir("alpine", 0o755); err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		arg  string
+		want string
+	}{
+		// A bare name is an image under rootfs/.
+		{"ubuntu", "rootfs/ubuntu"},
+		// Anything with a slash is a path.
+		{"./mine", "mine"},
+		{filepath.Join(dir, "mine"), "mine"},
 	}
-	s, err := ParseRun([]string{"alpine", "/bin/sh"}, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want, _ := filepath.EvalSymlinks(filepath.Join(dir, "alpine"))
-	got, _ := filepath.EvalSymlinks(s.Rootfs)
-	if got != want {
-		t.Errorf("Rootfs = %q, want %q", got, want)
+	for _, tt := range tests {
+		s, err := ParseRun([]string{tt.arg, "/bin/sh"}, false)
+		if err != nil {
+			t.Fatalf("%s: %v", tt.arg, err)
+		}
+		want, _ := filepath.EvalSymlinks(filepath.Join(dir, tt.want))
+		got, _ := filepath.EvalSymlinks(s.Rootfs)
+		if got != want {
+			t.Errorf("%s: Rootfs = %q, want %q", tt.arg, got, want)
+		}
 	}
 }
 

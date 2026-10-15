@@ -29,7 +29,7 @@ func main() {
 	)
 	switch os.Args[1] {
 	case "run":
-		code, err = run(os.Args[2:])
+		code, err = runContainer(os.Args[2:])
 	case container.ChildCommand:
 		code, err = container.Child()
 	case "-h", "--help", "help":
@@ -46,7 +46,7 @@ func main() {
 	os.Exit(code)
 }
 
-func run(args []string) (int, error) {
+func runContainer(args []string) (int, error) {
 	s, err := cli.ParseRun(args, !cli.IsRoot())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "mycontainer: %v\n\n%s", err, cli.Usage)

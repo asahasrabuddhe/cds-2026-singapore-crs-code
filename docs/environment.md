@@ -7,7 +7,7 @@ below are what an attendee gets too, apart from the kernel.
 
 ## Recorded versions
 
-Measured on 2026-09-16. State these on stage rather than guessing, and
+Measured on 2026-10-15. State these on stage rather than guessing, and
 re-run the commands if this repository is more than a few months old.
 
 | Component | Version | How to check |
@@ -15,7 +15,7 @@ re-run the commands if this repository is more than a few months old.
 | Distribution | Ubuntu 24.04.5 LTS | `lsb_release -d` |
 | Kernel | 7.0.14-orbstack, aarch64 | `uname -r` |
 | Go | 1.27.1 | `go version` |
-| busybox | 1.36.1 | `busybox \| head -1` |
+| Image | `ubuntu:24.04`, layer `90812e242c93` | `make rootfs`; `head -1 rootfs/ubuntu/etc/os-release` |
 | strace | 6.8 | `strace -V` |
 | uidmap (shadow) | 1:4.13+dfsg1-4ubuntu3.2 | `dpkg -s uidmap` |
 
@@ -46,13 +46,13 @@ demonstrated because it is not what the talk is about.
 ## Beat 7, counted
 
 `./scripts/demo.sh 7` runs one container under `strace -f` and tallies the
-calls. On this box, for `mycontainer run -memory 64m -pids 20 rootfs/busybox
+calls. On this box, for `mycontainer run -memory 64m -pids 20 ubuntu
 /bin/true`:
 
 ```
-     32 prctl
+     31 prctl
+     16 clone
      12 mount
-     12 clone
       3 execve
       1 umount2
       1 sethostname
@@ -65,8 +65,8 @@ descriptor, twelve `mount` calls (the private remount, the bind, `/proc`,
 `/dev`, six device nodes, `/sys`, `/sys/fs/cgroup`), one `pivot_root`, one
 `umount2` of the old root, twenty-seven `prctl(PR_CAPBSET_DROP)` plus a
 handful the Go runtime makes, and three `execve`: the runtime, its child,
-and the command. The twelve plain `clone` calls are the Go runtime
-starting threads in both processes. The `clone3` line itself:
+and the command. The plain `clone` calls are the Go runtime starting
+threads in both processes; their number varies from run to run. The `clone3` line itself:
 
 ```
 clone3({flags=CLONE_VM|CLONE_PIDFD|CLONE_VFORK|CLONE_NEWNS|CLONE_NEWCGROUP|CLONE_NEWUTS|CLONE_NEWIPC|CLONE_NEWPID|CLONE_NEWNET|CLONE_INTO_CGROUP, ..., cgroup=6}
@@ -77,9 +77,8 @@ instruction.
 
 ## The rootfs on virtiofs
 
-The repository is shared from the Mac, so `rootfs/busybox` sits on a
+The repository is shared from the Mac, so `rootfs/ubuntu` sits on a
 virtiofs mount and `mount` inside a container lists its root as `mac on /
 type virtiofs`. It works, and it is slower than a local disk. For the
-talk, either accept the odd first line of the mount listing or build the
-rootfs somewhere local: `ROOTFS=/home/$USER/rootfs ./scripts/rootfs.sh
-$ROOTFS`, then `ROOTFS=... ./scripts/demo.sh 2`.
+talk, either accept the odd first line of the mount listing or clone the
+repository somewhere local in the VM and pull the image there.

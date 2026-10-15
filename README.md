@@ -30,7 +30,9 @@ git clone https://github.com/asahasrabuddhe/cds-2026-singapore-crs-code.git ~/cr
 cd ~/crs && ./scripts/check.sh
 ```
 
-When it prints `ready`, you are ready.
+When it prints `ready`, you are ready. The pre-flight also pulls the image
+every container runs, `ubuntu:24.04`, into `rootfs/ubuntu` with
+`img2rootfs`, so run it while you have network.
 
 ## In the workshop
 
@@ -53,22 +55,22 @@ are stuck, and what `scripts/demo.sh` runs.
 
 ```bash
 make build         # ./mycontainer and ./img2rootfs
-make rootfs        # rootfs/busybox, from busybox-static, in a second
-sudo ./mycontainer run rootfs/busybox /bin/sh
+make rootfs        # pulls ubuntu:24.04 into rootfs/ubuntu; needs network
+sudo ./mycontainer run ubuntu /bin/sh
 ```
 
-PID 1 is the runtime's init and the shell is its child, `ls /` is the busybox
+PID 1 is the runtime's init and the shell is its child, `ls /` is the Ubuntu
 tree, `mount` shows nothing from the host, and `mount -t tmpfs none /tmp`
 is refused. Flags turn each piece on or off:
 
 ```bash
-sudo ./mycontainer run -ns pid,uts rootfs/busybox /bin/sh -c 'ls /proc'   # no mount ns: /proc is the host's
-sudo ./mycontainer run -memory 64m -cpus 0.5 -pids 20 rootfs/busybox /bin/sh
-sudo ./mycontainer run -caps default,+CAP_SYS_ADMIN rootfs/busybox /bin/sh
-sudo ./mycontainer run -init=false rootfs/busybox /bin/sleep 30       # sleep is PID 1, with everything that entails
-./mycontainer run rootfs/busybox /bin/sh -c id                        # rootless: uid 0 inside, you outside
-sudo ./mycontainer run -v rootfs/busybox /bin/true                    # narrate every step
-./img2rootfs alpine:3.22                                              # a real image, no Docker needed
+sudo ./mycontainer run -ns pid,uts ubuntu /bin/sh -c 'ls /proc'   # no mount ns: /proc is the host's
+sudo ./mycontainer run -memory 64m -cpus 0.5 -pids 20 ubuntu /bin/sh
+sudo ./mycontainer run -caps default,+CAP_SYS_ADMIN ubuntu /bin/sh
+sudo ./mycontainer run -init=false ubuntu /bin/sleep 30       # sleep is PID 1, with everything that entails
+./mycontainer run ubuntu /bin/sh -c id                        # rootless: uid 0 inside, you outside
+sudo ./mycontainer run -v ubuntu /bin/true                    # narrate every step
+./img2rootfs alpine:3.22                                              # any other image, then: run alpine ...
 ```
 
 `scripts/demo.sh 1` to `7` are the demos, one per pillar, each independent.
@@ -98,7 +100,7 @@ internal/cli/          flags to spec
 internal/container/    the parent and the child, wired together (Linux only)
 internal/image/        registry client and layer unpacking
 workshop/start/        the same program with the five bodies removed
-scripts/               demo.sh, check.sh, rootfs.sh, vm.sh
+scripts/               demo.sh, check.sh, vm.sh
 provision/             one cloud-init file for every VM
 docs/                  setup, the workshop plan, one explainer per pillar
 ```

@@ -2,6 +2,10 @@
 #
 # demo.sh, the demo driver for "Building a Container Runtime from Scratch".
 #
+# It drives the finished runtime at the repository root, where every piece
+# is a flag. The workshop itself happens in workshop/start; docs/workshop.md
+# is the plan.
+#
 # One beat per pillar, each independent and repeatable. Every command the
 # audience sees is echoed before it runs, so the terminal reads as a
 # transcript. Run from the repository root, inside the Linux box.
@@ -25,7 +29,7 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 
 readonly YELLOW=$'\e[33m' DIM=$'\e[2m' BOLD=$'\e[1m' RESET=$'\e[0m'
-readonly ROOTFS="${ROOTFS:-rootfs/busybox}"
+readonly IMAGE="${IMAGE:-ubuntu}"
 readonly BIN=./mycontainer
 
 # ---------------------------------------------------------------- helpers ---
@@ -47,7 +51,7 @@ run() {
 ctr() { run sudo -n "$BIN" run "$@"; }
 
 # A container that runs a shell script, which is most of them.
-sh_in() { ctr "$@" "$ROOTFS" /bin/sh -c "$SCRIPT"; }
+sh_in() { ctr "$@" "$IMAGE" /bin/sh -c "$SCRIPT"; }
 
 # The host PID of a container's PID 1, starting from a background job's
 # PID. There may be a sudo and there is always the runtime in between, so
@@ -74,7 +78,7 @@ need_build() {
     echo "not built: make build" >&2
     exit 1
   fi
-  if [[ ! -x "$ROOTFS/bin/busybox" ]]; then
+  if [[ ! -x "rootfs/$IMAGE/bin/bash" ]]; then
     echo "no rootfs: make rootfs" >&2
     exit 1
   fi
@@ -113,14 +117,15 @@ demo_1() {
 demo_2() {
   banner "2. ROOTFS: where a container lives"
 
-  say "Same directory, seen from the host"
-  run ls "$ROOTFS"
+  say "Leave a mark on the host"
+  run touch /tmp/host-was-here
+  run ls /tmp/host-was-here
 
-  say "Seen from inside, after pivot_root"
-  SCRIPT='ls /; echo; echo "os-release: $(cat /etc/os-release 2>&1)"; echo "old root: $(ls -d /.pivot_root 2>&1)"'
+  say "Look for it from inside, after pivot_root"
+  SCRIPT='cat /etc/os-release | head -1; ls /tmp/host-was-here; ls -d /.pivot_root'
   sh_in
-  note "The host's /etc/os-release is gone. So is the directory the old root"
-  note "was parked in during the pivot. There is no path back."
+  note "The image's own Ubuntu, and neither the host's file nor the directory"
+  note "the old root was parked in during the pivot. There is no path back."
 
   say "What is mounted in there"
   SCRIPT='mount'
@@ -128,6 +133,7 @@ demo_2() {
   note "Everything here was mounted by the runtime: the rootfs, /proc, /dev"
   note "and six device nodes bound from the host, /sys read-only, and the"
   note "container's own cgroup. Nothing else from the host."
+  rm -f /tmp/host-was-here
 }
 
 # ------------------------------------------------------- 3: cgroups -------
@@ -187,15 +193,15 @@ demo_5() {
   local script='sh -c "sleep 0.3 &"; exec sleep 30'
 
   say "sleep as PID 1: a child exits, and nobody reaps it"
-  printf '\n%s$ sudo ./mycontainer run -init=false %s /bin/sh -c %q &%s\n' "$BOLD" "$ROOTFS" "$script" "$RESET"
-  sudo -n "$BIN" run -init=false "$ROOTFS" /bin/sh -c "$script" &
+  printf '\n%s$ sudo ./mycontainer run -init=false %s /bin/sh -c %q &%s\n' "$BOLD" "$IMAGE" "$script" "$RESET"
+  sudo -n "$BIN" run -init=false "$IMAGE" /bin/sh -c "$script" &
   local parent=$!
   sleep 1
   local init
   init="$(find_init "$parent")"
   run ps -o pid,ppid,stat,comm -p "$init" --ppid "$init"
   note "sleep is the container's PID 1. Under it, a zombie (state Z): the"
-  note "background job's shell, orphaned onto PID 1 and never collected."
+  note "background sleep, orphaned onto PID 1, exited, and never collected."
 
   say "Now send PID 1 a SIGTERM, the way docker stop would"
   run sudo -n kill -TERM "$init"
@@ -208,8 +214,8 @@ demo_5() {
   wait "$parent" 2>/dev/null
 
   say "The same, with the runtime's init in front"
-  printf '\n%s$ sudo ./mycontainer run %s /bin/sh -c %q &%s\n' "$BOLD" "$ROOTFS" "$script" "$RESET"
-  sudo -n "$BIN" run "$ROOTFS" /bin/sh -c "$script" &
+  printf '\n%s$ sudo ./mycontainer run %s /bin/sh -c %q &%s\n' "$BOLD" "$IMAGE" "$script" "$RESET"
+  sudo -n "$BIN" run "$IMAGE" /bin/sh -c "$script" &
   parent=$!
   sleep 1
   init="$(find_init "$parent")"
@@ -230,13 +236,13 @@ demo_6() {
   say "No sudo this time"
   run id -u
   SCRIPT='id; cat /proc/self/uid_map; grep CapBnd /proc/self/status'
-  run "$BIN" run "$ROOTFS" /bin/sh -c "$SCRIPT"
+  run "$BIN" run "$IMAGE" /bin/sh -c "$SCRIPT"
   note "uid 0 inside. The map says: container 0 is host $(id -u), and that is"
   note "the only line. Same fourteen capabilities, in a namespace that owns"
   note "nothing on the host."
 
   say "The host's view of the same process"
-  "$BIN" run "$ROOTFS" /bin/sleep 5 &
+  "$BIN" run "$IMAGE" /bin/sleep 5 &
   local parent=$!
   sleep 0.5
   local init
@@ -260,7 +266,7 @@ demo_7() {
   local trace=/tmp/mycontainer.trace
   run sudo -n strace -f -o "$trace" \
     -e trace=clone,clone3,unshare,sethostname,mount,pivot_root,umount2,prctl,execve \
-    "$BIN" run -memory 64m -pids 20 "$ROOTFS" /bin/true
+    "$BIN" run -memory 64m -pids 20 "$IMAGE" /bin/true
 
   say "Tallied"
   run sh -c "grep -oE '^[0-9]+ +[a-z_0-9]+\(' '$trace' | awk '{print \$2}' | tr -d '(' | sort | uniq -c | sort -rn"

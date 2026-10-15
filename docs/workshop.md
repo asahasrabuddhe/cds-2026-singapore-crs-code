@@ -32,7 +32,7 @@ things below.
 ```bash
 cd workshop/start
 make build          # ./mycontainer, which runs a process with no costume yet
-make rootfs         # rootfs/busybox, in a second
+make rootfs         # links rootfs/ubuntu, pulled by the pre-flight before the day
 go test ./...       # six packages fail on Linux. That is the syllabus.
 ```
 
@@ -42,7 +42,7 @@ go test ./...       # six packages fail on Linux. That is the syllabus.
 |---|---|---|---|---|
 | 0:00 | Setup check and the shape of the thing | | `./scripts/check.sh` | a box that says `ready` |
 | 0:06 | **1. Namespaces** | `internal/namespace/namespace.go`, `internal/container/container_linux.go` | `go test ./internal/namespace/` | `hostname` inside differs; `ps` still shows the host |
-| 0:11 | **2. Rootfs** | `internal/rootfs/rootfs.go` | `go test ./internal/rootfs/` | `ps` shows two processes; `ls /` is busybox; `/etc/os-release` is gone |
+| 0:11 | **2. Rootfs** | `internal/rootfs/rootfs.go` | `go test ./internal/rootfs/` | `ps` shows two processes; `ls /` is the image; a file on the host's `/tmp` is gone |
 | 0:21 | **3. cgroups** | `internal/cgroup/cgroup.go`, `container_linux.go` | `go test ./internal/cgroup/` | a fork bomb is refused; `cat /sys/fs/cgroup/pids.max` inside reads the limit |
 | 0:29 | **4. Capabilities** | `internal/caps/caps.go` | `go test ./internal/caps/` | `mount` inside is refused; `CapBnd` reads `a80425fb` |
 | 0:33 | **5. Init** | `internal/initproc/initproc_linux.go` | `go test ./internal/initproc/` | no zombie under PID 1 after an orphan exits |
@@ -69,7 +69,7 @@ Check:
 ```console
 $ go test ./internal/namespace/
 $ make build
-$ sudo ./mycontainer run -ns pid,uts -hostname box rootfs/busybox /bin/sh -c 'hostname; echo $$; ls -d /proc/[0-9]* | wc -l'
+$ sudo ./mycontainer run -ns pid,uts -hostname box ubuntu /bin/sh -c 'hostname; echo $$; ls -d /proc/[0-9]* | wc -l'
 ```
 
 Until the wiring line is in, the runtime refuses `-hostname` with "not in
@@ -103,10 +103,12 @@ Check:
 ```console
 $ go test ./internal/rootfs/
 $ make build
-$ sudo ./mycontainer run rootfs/busybox /bin/sh -c 'ps; ls /; cat /etc/os-release; mount'
+$ touch /tmp/host-was-here
+$ sudo ./mycontainer run ubuntu /bin/sh -c 'ps; ls /; ls /tmp; mount'
 ```
 
-Two processes. The busybox tree. No `/etc/os-release`. A mount table with
+Two processes. The Ubuntu image's tree. An empty `/tmp`, without the file
+you just made on the host. A mount table with
 nothing from the host on it.
 
 ### Step 3: cgroups, what it can use
@@ -131,8 +133,8 @@ Check:
 ```console
 $ go test ./internal/cgroup/
 $ make build
-$ sudo ./mycontainer run -pids 20 rootfs/busybox /bin/sh -c 'cat /sys/fs/cgroup/pids.max; for i in $(seq 40); do sleep 2 & done'
-$ sudo ./mycontainer run -memory 64m rootfs/busybox /bin/sh -c 'a=$(head -c 100000000 /dev/zero | tr "\0" x); echo survived'; echo $?
+$ sudo ./mycontainer run -pids 20 ubuntu /bin/sh -c 'cat /sys/fs/cgroup/pids.max; for i in $(seq 40); do sleep 2 & done'
+$ sudo ./mycontainer run -memory 64m ubuntu /bin/sh -c 'a=$(head -c 100000000 /dev/zero | tr "\0" x); echo survived'; echo $?
 ```
 
 `20`, then `can't fork`. Then nothing, and 137.
@@ -157,8 +159,8 @@ Check:
 ```console
 $ go test ./internal/caps/
 $ make build
-$ sudo ./mycontainer run rootfs/busybox /bin/sh -c 'grep CapBnd /proc/self/status; mount -t tmpfs none /tmp'
-$ sudo ./mycontainer run -caps default,+CAP_SYS_ADMIN rootfs/busybox /bin/sh -c 'mount -t tmpfs none /tmp && echo MOUNTED'
+$ sudo ./mycontainer run ubuntu /bin/sh -c 'grep CapBnd /proc/self/status; mount -t tmpfs none /tmp'
+$ sudo ./mycontainer run -caps default,+CAP_SYS_ADMIN ubuntu /bin/sh -c 'mount -t tmpfs none /tmp && echo MOUNTED'
 ```
 
 `a80425fb` and a refusal, then `a82425fb` and `MOUNTED`. Bit 21.
@@ -182,7 +184,7 @@ Check, on Linux:
 ```console
 $ go test ./internal/initproc/
 $ make build
-$ sudo ./mycontainer run rootfs/busybox /bin/sh -c 'sh -c "sleep 0.3 &"; exec sleep 5' &
+$ sudo ./mycontainer run ubuntu /bin/sh -c 'sh -c "sleep 0.3 &"; exec sleep 5' &
 $ sleep 1; ps -eo pid,ppid,stat,comm | grep -E 'Z|sleep|exe'
 ```
 
@@ -198,7 +200,7 @@ your own UID and GID, size 1, with `GidMappingsEnableSetgroups` false.
 Then, with no sudo:
 
 ```console
-$ ./mycontainer run rootfs/busybox /bin/sh -c 'id; cat /proc/self/uid_map'
+$ ./mycontainer run ubuntu /bin/sh -c 'id; cat /proc/self/uid_map'
 ```
 
 `uid=0(root)` inside, `0 1000 1` in the map, and `/proc/<pid>/status` on

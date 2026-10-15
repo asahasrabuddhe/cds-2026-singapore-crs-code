@@ -40,16 +40,16 @@ $ ./scripts/demo.sh 3
 By hand:
 
 ```console
-$ sudo ./mycontainer run -memory 64m -cpus 0.5 -pids 20 rootfs/busybox /bin/sh -c \
+$ sudo ./mycontainer run -memory 64m -cpus 0.5 -pids 20 ubuntu /bin/sh -c \
     'cat /proc/self/cgroup; cat /sys/fs/cgroup/memory.max /sys/fs/cgroup/cpu.max /sys/fs/cgroup/pids.max'
-$ sudo ./mycontainer run -pids 20 rootfs/busybox /bin/sh -c 'for i in $(seq 40); do sleep 2 & done'
-$ sudo ./mycontainer run -memory 64m rootfs/busybox /bin/sh -c 'a=$(head -c 100000000 /dev/zero | tr "\0" x); echo survived'; echo $?
+$ sudo ./mycontainer run -pids 20 ubuntu /bin/sh -c 'for i in $(seq 40); do sleep 2 & done'
+$ sudo ./mycontainer run -memory 64m ubuntu /bin/sh -c 'a=$(head -c 100000000 /dev/zero | tr "\0" x); echo survived'; echo $?
 ```
 
 ## Expected output
 
 The first prints `0::/`, `67108864`, `50000 100000`, `20`. The fork bomb
-prints `/bin/sh: can't fork: Resource temporarily unavailable`. The hog
+prints `/bin/sh: 0: Cannot fork`, which is dash reporting EAGAIN. The hog
 prints nothing and exits 137, which is 128 plus SIGKILL: the OOM killer
 found the shell holding a 100 MB string in a 64 MB group. After each,
 `ls /sys/fs/cgroup/mycontainer/` shows no container directories, because

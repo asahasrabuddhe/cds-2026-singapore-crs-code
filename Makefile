@@ -1,10 +1,9 @@
 .PHONY: build check fmt vet test test-root lint rootfs clean vm vm-shell vm-down
 
-# The binaries land at the repo root because that is what the demo script
-# and the slides type, and it is shortest to say on stage.
+# The binaries land at the repo root, where the demo types them.
 build:
-	go build -o mycontainer ./cmd/mycontainer
 	go build -o img2rootfs ./cmd/img2rootfs
+	@if [ -d cmd/mycontainer ]; then go build -o mycontainer ./cmd/mycontainer; fi
 
 # Everything CI runs, and everything to run before committing.
 check: fmt vet test lint
@@ -17,25 +16,28 @@ fmt:
 vet:
 	go vet ./...
 	GOOS=linux go vet ./...
+	GOOS=linux go vet -tags integration ./...
 
-# The kernel-facing code is build-tagged linux; everything it decides is in
-# packages with no tag, so this passes on a Mac. The Linux-only tests run
-# inside the VM with `make test` there, or with test-root for the ones that
-# need a real namespace.
+# The pure packages, on any OS.
 test:
 	go test ./...
 
-# The end-to-end tests: build the binary, build a busybox rootfs, run real
-# containers. Root, because that is what the runtime is written for; the
-# rootless path is one of the cases.
+# Real containers, as root, inside the VM. The rootfs is pulled as you, not
+# as root, so the rootless tags can write to it too.
 test-root: build rootfs
-	go test -tags integration -exec sudo ./cmd/... ./internal/container/...
+	go test -tags integration -exec sudo ./...
 
 lint:
 	shellcheck scripts/*.sh
 
-rootfs:
-	./scripts/rootfs.sh rootfs/busybox
+# rootfs/<image> is what `mycontainer run <image>` runs. The 2025 version
+# exported an image through Docker; img2rootfs pulls it from the registry
+# with the standard library and needs no Docker at all.
+rootfs: rootfs/ubuntu
+
+rootfs/ubuntu:
+	go build -o img2rootfs ./cmd/img2rootfs
+	./img2rootfs -o rootfs/ubuntu ubuntu:24.04
 
 clean:
 	rm -f mycontainer img2rootfs
@@ -43,8 +45,7 @@ clean:
 
 # ---------------------------------------------------------------- the VM ---
 # One cloud-init file, provision/user-data.yaml, for every VM. These
-# targets drive OrbStack, which is what the talk is rehearsed on. Multipass
-# and Lima take the same file; see docs/setup.md.
+# targets drive OrbStack or Multipass; see docs/setup.md.
 
 VM ?= crs-dev
 

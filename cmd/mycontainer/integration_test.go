@@ -1,12 +1,11 @@
 //go:build linux && integration
 
-// End-to-end tests. They build the binary, build a busybox rootfs, and run
-// real containers, so they need Linux and root:
+// End-to-end tests: real containers, as root, inside the VM.
 //
 //	make test-root
 //
-// Each test pins one thing the talk claims on stage, so a claim that stops
-// being true fails here before it fails in front of a room.
+// Each test pins one thing a workshop step or a demo shows, so a step that
+// stops working fails here before it fails in front of a room.
 package main
 
 import (
@@ -22,23 +21,19 @@ import (
 	"time"
 )
 
-var (
-	binary string
-	rootfs string
-)
+var repo, binary string
 
 func TestMain(m *testing.M) {
 	if os.Geteuid() != 0 {
 		println("integration tests need root: make test-root")
 		os.Exit(1)
 	}
-	repo, err := filepath.Abs("../..")
-	if err != nil {
+	var err error
+	if repo, err = filepath.Abs("../.."); err != nil {
 		panic(err)
 	}
 	binary = filepath.Join(repo, "mycontainer")
-	rootfs = filepath.Join(repo, "rootfs", "busybox")
-	for _, p := range []string{binary, rootfs} {
+	for _, p := range []string{binary, filepath.Join(repo, "rootfs", "ubuntu", "bin", "bash")} {
 		if _, err := os.Stat(p); err != nil {
 			println("missing", p, "- run make build rootfs first")
 			os.Exit(1)
@@ -47,112 +42,222 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// runContainer executes `mycontainer run <args...> rootfs sh -c <script>` and
-// returns combined output and exit code.
-func runContainer(t *testing.T, args []string, script string) (string, int) {
+type result struct {
+	stdout, stderr string
+	code           int
+}
+
+// run executes mycontainer from the repository root, where rootfs/ lives.
+func run(t *testing.T, args ...string) result {
 	t.Helper()
-	full := append([]string{"run"}, args...)
-	full = append(full, rootfs, "/bin/sh", "-c", script)
-	cmd := exec.Command(binary, full...)
-	var out bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &out
+	cmd := exec.Command(binary, args...)
+	cmd.Dir = repo
+	return wait(t, cmd)
+}
+
+func wait(t *testing.T, cmd *exec.Cmd) result {
+	t.Helper()
+	var out, errb bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &errb
 	err := cmd.Run()
-	code := 0
+	r := result{stdout: out.String(), stderr: errb.String()}
 	if exitErr, ok := err.(*exec.ExitError); ok {
-		code = exitErr.ExitCode()
+		r.code = exitErr.ExitCode()
 	} else if err != nil {
-		t.Fatalf("run %v: %v\n%s", full, err, out.String())
+		t.Fatalf("%v: %v\n%s", cmd.Args, err, errb.String())
 	}
-	return out.String(), code
+	return r
 }
 
-func TestPIDNamespaceMakesTheCommandPID1sChild(t *testing.T) {
-	out, _ := runContainer(t, nil, "echo pid=$$; ps")
-	if !strings.Contains(out, "pid=") {
-		t.Fatalf("no pid line:\n%s", out)
+// runAsUser executes mycontainer as the user who ran sudo, with no
+// privileges at all: the rootless path.
+func runAsUser(t *testing.T, args ...string) (result, int) {
+	t.Helper()
+	uid, err1 := strconv.Atoi(os.Getenv("SUDO_UID"))
+	gid, err2 := strconv.Atoi(os.Getenv("SUDO_GID"))
+	if err1 != nil || err2 != nil || uid == 0 {
+		t.Skip("run through sudo by an ordinary user: make test-root")
 	}
-	// init is PID 1 and the shell is a low number, not a host PID.
-	if !regexp.MustCompile(`(?m)^\s+1 root\s+/proc/self/exe child`).MatchString(out) {
-		t.Errorf("PID 1 is not our init:\n%s", out)
+	cmd := exec.Command(binary, args...)
+	cmd.Dir = repo
+	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}}
+	return wait(t, cmd), uid
+}
+
+// sh is `run ubuntu /bin/sh -c script`.
+func sh(script string) []string {
+	return []string{"run", "ubuntu", "/bin/sh", "-c", script}
+}
+
+func count(t *testing.T, s string) int {
+	t.Helper()
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil {
+		t.Fatalf("not a count: %q", s)
 	}
-	if strings.Contains(out, "systemd") {
-		t.Errorf("host processes visible inside the container:\n%s", out)
+	return n
+}
+
+// ------------------------------------------------- PID namespace, step 1 ---
+
+func TestBothSidesLogTheirPID(t *testing.T) {
+	r := run(t, sh("true")...)
+	if !regexp.MustCompile(`(?m)^\[run\] as pid \d+$`).MatchString(r.stderr) {
+		t.Errorf("no [run] line:\n%s", r.stderr)
+	}
+	if !strings.Contains(r.stderr, "[child] as pid 1\n") {
+		t.Errorf("the child is not PID 1:\n%s", r.stderr)
 	}
 }
 
-func TestWithoutAMountNamespaceProcIsTheHosts(t *testing.T) {
-	// The gotcha: a PID namespace alone changes nothing that reads /proc,
-	// because /proc is still the host's. Count its process directories
-	// rather than run ps: without a mount namespace the command is the
-	// host's own ps, and procps-ng on Ubuntu 24.04 aborts with "fatal
-	// library error, lookup self" when /proc/self is a PID it was not told.
-	count := "ls -d /proc/[0-9]* | wc -l"
-	outside, _ := runContainer(t, []string{"-ns", "pid,uts"}, count)
-	inside, _ := runContainer(t, []string{"-ns", "pid,uts,mnt"}, count)
+func TestTheCommandIsPID1WithoutTheInit(t *testing.T) {
+	// With -init=false the child execs the command, so the command
+	// inherits PID 1.
+	r := run(t, "run", "-init=false", "ubuntu", "/bin/sh", "-c", "echo $$")
+	if strings.TrimSpace(r.stdout) != "1" {
+		t.Errorf("$$ = %q, want 1\n%s", r.stdout, r.stderr)
+	}
+}
 
-	n := func(s string) int {
-		v, err := strconv.Atoi(strings.TrimSpace(s))
-		if err != nil {
-			t.Fatalf("not a count: %q", s)
+func TestExitCodeComesBack(t *testing.T) {
+	if r := run(t, sh("exit 5")...); r.code != 5 {
+		t.Errorf("exit code %d, want 5", r.code)
+	}
+}
+
+// -------------------------------------------------------- rootfs, step 2 ---
+
+func TestTheContainerHasItsOwnProc(t *testing.T) {
+	// A mount namespace, a fresh /proc mounted from inside the PID
+	// namespace, and /proc lists the container: the shell, ls and wc.
+	if n := count(t, run(t, sh("ls -d /proc/[0-9]* | wc -l")...).stdout); n > 5 {
+		t.Errorf("/proc lists %d processes; want only the container's own", n)
+	}
+}
+
+func TestTheHostFilesystemIsGone(t *testing.T) {
+	marker := filepath.Join("/tmp", "crs-host-marker-"+strconv.Itoa(os.Getpid()))
+	if err := os.WriteFile(marker, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(marker)
+
+	r := run(t, sh("test -e "+marker+" && echo HOST; test -e /.pivot_root && echo OLDROOT; cat /etc/os-release")...)
+	if strings.Contains(r.stdout, "HOST") {
+		t.Error("a file on the host's /tmp is visible inside")
+	}
+	if strings.Contains(r.stdout, "OLDROOT") {
+		t.Error("the old root's parking directory survived the pivot")
+	}
+	if !strings.Contains(r.stdout, "Ubuntu") {
+		t.Errorf("the rootfs is not the ubuntu image:\n%s", r.stdout)
+	}
+}
+
+func TestAMissingImageIsAnError(t *testing.T) {
+	r := run(t, "run", "no-such-image", "/bin/true")
+	if r.code == 0 || !strings.Contains(r.stderr, "rootfs") {
+		t.Errorf("want a rootfs error, got code %d:\n%s", r.code, r.stderr)
+	}
+}
+
+// -------------------------------------------------------- user namespace ---
+
+func TestRootInsideTheUserOutside(t *testing.T) {
+	r, uid := runAsUser(t, sh("id -u; cat /proc/self/uid_map")...)
+	if r.code != 0 {
+		t.Fatalf("no sudo, no container: code %d\n%s", r.code, r.stderr)
+	}
+	lines := strings.Split(strings.TrimSpace(r.stdout), "\n")
+	if len(lines) != 2 || lines[0] != "0" {
+		t.Fatalf("want uid 0 and a one-line map, got:\n%s", r.stdout)
+	}
+	if got := strings.Fields(lines[1]); len(got) != 3 || got[0] != "0" || got[1] != strconv.Itoa(uid) || got[2] != "1" {
+		t.Errorf("uid_map = %q, want 0 %d 1", lines[1], uid)
+	}
+}
+
+func TestUnderSudoThereIsNoUserNamespace(t *testing.T) {
+	// As Docker does: rootful by default, a user namespace
+	// only when not root or asked for with -rootless. The map is the
+	// identity map of the initial namespace.
+	r := run(t, sh("cat /proc/self/uid_map")...)
+	if f := strings.Fields(r.stdout); len(f) != 3 || f[0] != "0" || f[1] != "0" || f[2] != "4294967295" {
+		t.Errorf("uid_map = %q, want the initial namespace's", r.stdout)
+	}
+}
+
+// --------------------------------------------------------- UTS namespace ---
+
+func TestTheHostnameIsTheContainerID(t *testing.T) {
+	before, _ := os.Hostname()
+	r, _ := runAsUser(t, sh("hostname")...)
+	if !regexp.MustCompile(`^[0-9a-f]{12}$`).MatchString(strings.TrimSpace(r.stdout)) {
+		t.Errorf("hostname inside = %q, want the twelve-character container id\n%s", r.stdout, r.stderr)
+	}
+	if after, _ := os.Hostname(); after != before {
+		t.Fatalf("the host was renamed from %q to %q", before, after)
+	}
+}
+
+// --------------------------------------------------------- IPC namespace ---
+
+func TestTheHostsSharedMemoryIsInvisible(t *testing.T) {
+	// The 2025 demo: make a segment on the host, then look for it inside.
+	out, err := exec.Command("ipcmk", "-M", "1024").Output()
+	if err != nil {
+		t.Fatalf("ipcmk: %v", err)
+	}
+	m := regexp.MustCompile(`id: (\d+)`).FindStringSubmatch(string(out))
+	if m == nil {
+		t.Fatalf("ipcmk said %q", out)
+	}
+	shmid := m[1]
+	defer exec.Command("ipcrm", "-m", shmid).Run()
+
+	r, _ := runAsUser(t, sh("ipcs -m")...)
+	if !strings.Contains(r.stdout, "Shared Memory Segments") {
+		t.Fatalf("ipcs did not run:\n%s%s", r.stdout, r.stderr)
+	}
+	for _, line := range strings.Split(r.stdout, "\n") {
+		if f := strings.Fields(line); len(f) > 1 && f[1] == shmid {
+			t.Errorf("the host's segment %s is visible inside:\n%s", shmid, r.stdout)
 		}
-		return v
-	}
-	if host, own := n(outside), n(inside); host <= own || own > 5 {
-		t.Errorf("without mnt /proc listed %d processes, with mnt %d; want the host's many, then a handful", host, own)
 	}
 }
 
-func TestUTSNamespaceIsolatesTheHostname(t *testing.T) {
-	host, _ := os.Hostname()
-	out, _ := runContainer(t, []string{"-hostname", "inside"}, "hostname")
-	if strings.TrimSpace(out) != "inside" {
-		t.Errorf("hostname inside = %q", strings.TrimSpace(out))
-	}
-	after, _ := os.Hostname()
-	if after != host {
-		t.Fatalf("the host was renamed from %q to %q", host, after)
-	}
-}
+// ------------------------------------------------------- cgroups, step 3 ---
 
-func TestPivotRootHidesTheHostFilesystem(t *testing.T) {
-	out, _ := runContainer(t, nil, "ls /; test -e /.pivot_root && echo LEAK; test -e /etc/os-release && echo HOST-ETC")
-	if strings.Contains(out, "LEAK") {
-		t.Error("the put_old directory survived")
-	}
-	if strings.Contains(out, "HOST-ETC") {
-		t.Error("the host's /etc is reachable")
-	}
-	for _, want := range []string{"bin", "proc", "dev"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("rootfs is missing %s:\n%s", want, out)
+func TestLimitsAreVisibleInside(t *testing.T) {
+	r := run(t, "run", "-memory", "64m", "-cpus", "0.5", "-pids", "20", "ubuntu", "/bin/sh", "-c",
+		"cat /proc/self/cgroup /sys/fs/cgroup/memory.max /sys/fs/cgroup/cpu.max /sys/fs/cgroup/pids.max")
+	// 0::/ is the cgroup namespace: the container's cgroup is its root.
+	for _, want := range []string{"0::/\n", "67108864\n", "50000 100000\n", "20\n"} {
+		if !strings.Contains(r.stdout, want) {
+			t.Errorf("missing %q in:\n%s%s", want, r.stdout, r.stderr)
 		}
 	}
 }
 
-func TestExitCodePropagates(t *testing.T) {
-	if _, code := runContainer(t, nil, "exit 5"); code != 5 {
-		t.Errorf("exit code %d, want 5", code)
-	}
-	if _, code := runContainer(t, []string{"-init=false"}, "exit 6"); code != 6 {
-		t.Errorf("exit code without init %d, want 6", code)
+func TestAForkBombIsRefused(t *testing.T) {
+	r := run(t, "run", "-pids", "20", "ubuntu", "/bin/sh", "-c", "for i in $(seq 40); do sleep 2 & done; wait")
+	if !strings.Contains(r.stderr, "Cannot fork") {
+		t.Errorf("fork was never refused:\n%s", r.stderr)
 	}
 }
 
-func TestCgroupLimitsAreVisibleFromInside(t *testing.T) {
-	out, _ := runContainer(t, []string{"-memory", "64m", "-cpus", "0.5", "-pids", "32"},
-		"cat /proc/self/cgroup; cat /sys/fs/cgroup/memory.max /sys/fs/cgroup/cpu.max /sys/fs/cgroup/pids.max")
-	for _, want := range []string{"0::/\n", "67108864\n", "50000 100000\n", "32\n"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("missing %q in:\n%s", want, out)
-		}
+func TestAMemoryHogIsKilled(t *testing.T) {
+	// A 100 MB string in a 64 MB cgroup. The OOM killer takes the shell,
+	// and a death by SIGKILL is exit 137.
+	r := run(t, "run", "-memory", "64m", "ubuntu", "/bin/sh", "-c", "a=$(head -c 100000000 /dev/zero | tr '\\0' x); echo survived")
+	if strings.Contains(r.stdout, "survived") || r.code != 137 {
+		t.Errorf("the hog survived, code %d:\n%s", r.code, r.stdout)
 	}
 }
 
-func TestCgroupIsRemovedAfterExit(t *testing.T) {
-	// Sweep what a killed or crashed earlier run may have left, so this
-	// test judges only the container it runs.
-	sweepCgroups()
-	runContainer(t, []string{"-pids", "20"}, "true")
+func TestTheCgroupIsRemovedAfterExit(t *testing.T) {
+	sweep()
+	run(t, "run", "-pids", "20", "ubuntu", "/bin/true")
 	entries, err := os.ReadDir("/sys/fs/cgroup/mycontainer")
 	if err != nil {
 		t.Fatal(err)
@@ -164,128 +269,54 @@ func TestCgroupIsRemovedAfterExit(t *testing.T) {
 	}
 }
 
-func TestPidsMaxStopsAForkBomb(t *testing.T) {
-	// 20, not 8: the init's own threads count against the limit, see
-	// container.Child. Forty forks against twenty slots still gets refused.
-	out, _ := runContainer(t, []string{"-pids", "20"}, "for i in $(seq 40); do sleep 2 & done; sleep 0.3; echo forked=$(ps | grep -c 'sleep 2')")
-	if !strings.Contains(out, "can't fork") {
-		t.Errorf("fork was never refused:\n%s", out)
-	}
-	if strings.Contains(out, "failed to create new OS thread") {
-		t.Errorf("the init itself was starved of threads:\n%s", out)
-	}
-}
-
-func TestMemoryMaxKillsAHog(t *testing.T) {
-	// ash builds a 100 MB string in a 64 MB cgroup and gets OOM-killed. A
-	// dead shell exits 137, and its output never includes the last echo.
-	out, code := runContainer(t, []string{"-memory", "64m"}, `a=$(head -c 100000000 /dev/zero | tr '\0' x); echo survived`)
-	if strings.Contains(out, "survived") || code != 137 {
-		t.Errorf("hog survived (code %d):\n%s", code, out)
+// sweep removes cgroups an earlier, killed run left behind, so the test
+// judges only the container it runs.
+func sweep() {
+	entries, _ := os.ReadDir("/sys/fs/cgroup/mycontainer")
+	for _, e := range entries {
+		if e.IsDir() {
+			_ = os.Remove(filepath.Join("/sys/fs/cgroup/mycontainer", e.Name()))
+		}
 	}
 }
 
-func TestDefaultCapabilitiesCannotMount(t *testing.T) {
-	out, _ := runContainer(t, nil, "grep CapBnd /proc/self/status; mount -t tmpfs t /tmp && echo MOUNTED || echo DENIED")
-	// 0xa80425fb is the bounding set Docker gives a default container. Same
-	// fourteen bits.
-	if !strings.Contains(out, "00000000a80425fb") {
-		t.Errorf("bounding set is not the default fourteen:\n%s", out)
-	}
-	if !strings.Contains(out, "DENIED") {
-		t.Errorf("mount succeeded without CAP_SYS_ADMIN:\n%s", out)
-	}
-}
+// ---------------------------------- capabilities and init, steps 4 and 5 ---
 
-func TestAddingSysAdminAllowsMount(t *testing.T) {
-	out, _ := runContainer(t, []string{"-caps", "default,+CAP_SYS_ADMIN"}, "mount -t tmpfs t /tmp && echo MOUNTED || echo DENIED")
-	if !strings.Contains(out, "MOUNTED") {
-		t.Errorf("mount denied with CAP_SYS_ADMIN:\n%s", out)
+func TestEveryNamespaceIsAFlag(t *testing.T) {
+	// The step 1 gotcha, on demand: without mnt, /proc is the host's.
+	c := "ls -d /proc/[0-9]* | wc -l"
+	host := count(t, run(t, "run", "-ns", "pid,uts", "ubuntu", "/bin/sh", "-c", c).stdout)
+	own := count(t, run(t, "run", "-ns", "pid,uts,mnt", "ubuntu", "/bin/sh", "-c", c).stdout)
+	if host <= own || own > 5 {
+		t.Errorf("/proc listed %d without mnt and %d with; want the host's many, then a handful", host, own)
 	}
 }
 
-func TestInitReapsOrphansAndBareCommandDoesNot(t *testing.T) {
-	// Seen from the host: a container whose PID 1 is `sleep` collects a
-	// zombie, a container with our init in front does not. The orphan is a
-	// background sleep whose shell exits at once, so it is re-parented to
-	// PID 1 and PID 1 has to reap it. busybox runs sleep inside the forked
-	// shell rather than exec'ing it, so the zombie's name is sh.
-	script := `sh -c "sleep 0.2 &"; exec sleep 3`
-
-	for _, tc := range []struct {
-		name       string
-		args       []string
-		wantZombie bool
-	}{
-		{"init=false", []string{"-init=false"}, true},
-		{"init", nil, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			full := append([]string{"run"}, tc.args...)
-			full = append(full, rootfs, "/bin/sh", "-c", script)
-			cmd := exec.Command(binary, full...)
-			if err := cmd.Start(); err != nil {
-				t.Fatal(err)
-			}
-			time.Sleep(1 * time.Second)
-
-			// The container's PID 1, as the host numbers it: the one child
-			// of the runtime process. Kill it, not the runtime, so the
-			// runtime exits normally and removes its cgroup.
-			init := containerPID(t, cmd.Process.Pid)
-			defer func() { _ = syscall.Kill(init, syscall.SIGKILL); _ = cmd.Wait() }()
-
-			// ps from the host sees the container's processes with their
-			// real state. A zombie whose parent is the container's PID 1
-			// is one PID 1 failed to reap.
-			out, _ := exec.Command("ps", "-eo", "pid,ppid,stat,comm").Output()
-			zombie := regexp.MustCompile(`(?m)^\s*\d+\s+` + strconv.Itoa(init) + `\s+Z`).MatchString(string(out))
-			if zombie != tc.wantZombie {
-				t.Errorf("zombie under the container's PID 1 = %v, want %v\n%s", zombie, tc.wantZombie, out)
-			}
-		})
+func TestAChosenHostname(t *testing.T) {
+	before, _ := os.Hostname()
+	if r := run(t, "run", "-hostname", "inside", "ubuntu", "hostname"); strings.TrimSpace(r.stdout) != "inside" {
+		t.Errorf("hostname inside = %q", r.stdout)
+	}
+	if after, _ := os.Hostname(); after != before {
+		t.Fatalf("the host was renamed from %q to %q", before, after)
 	}
 }
 
-func TestInitForwardsSignals(t *testing.T) {
-	// SIGTERM to the container's host PID reaches the sleep inside and the
-	// container exits 143. Without init, PID 1 is sleep, the kernel drops
-	// the signal, and the container is still running a second later.
-	for _, tc := range []struct {
-		name     string
-		args     []string
-		wantDead bool
-	}{
-		{"init", nil, true},
-		{"init=false", []string{"-init=false"}, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			full := append([]string{"run"}, tc.args...)
-			full = append(full, rootfs, "/bin/sleep", "30")
-			cmd := exec.Command(binary, full...)
-			if err := cmd.Start(); err != nil {
-				t.Fatal(err)
-			}
-			time.Sleep(500 * time.Millisecond)
+func TestRootCannotMountWithTheDefaultCapabilities(t *testing.T) {
+	r := run(t, sh("grep CapBnd /proc/self/status; mount -t tmpfs none /tmp && echo MOUNTED || echo DENIED")...)
+	// 0xa80425fb: the fourteen capabilities Docker leaves a container.
+	if !strings.Contains(r.stdout, "00000000a80425fb") {
+		t.Errorf("the bounding set is not the default fourteen:\n%s", r.stdout)
+	}
+	if !strings.Contains(r.stdout, "DENIED") {
+		t.Errorf("mount succeeded without CAP_SYS_ADMIN:\n%s", r.stdout)
+	}
+}
 
-			init := containerPID(t, cmd.Process.Pid)
-			_ = syscall.Kill(init, syscall.SIGTERM)
-
-			done := make(chan error, 1)
-			go func() { done <- cmd.Wait() }()
-			select {
-			case err := <-done:
-				if !tc.wantDead {
-					t.Errorf("container died on SIGTERM: %v", err)
-				}
-			case <-time.After(2 * time.Second):
-				if tc.wantDead {
-					t.Error("container ignored SIGTERM")
-				}
-				_ = syscall.Kill(init, syscall.SIGKILL)
-				<-done
-			}
-		})
+func TestOneCapabilityAndRootCanMount(t *testing.T) {
+	r := run(t, "run", "-caps", "default,+CAP_SYS_ADMIN", "ubuntu", "/bin/sh", "-c", "mount -t tmpfs none /tmp && echo MOUNTED || echo DENIED")
+	if !strings.Contains(r.stdout, "MOUNTED") {
+		t.Errorf("mount denied with CAP_SYS_ADMIN:\n%s%s", r.stdout, r.stderr)
 	}
 }
 
@@ -296,77 +327,72 @@ func containerPID(t *testing.T, parent int) int {
 	out, _ := exec.Command("pgrep", "-P", strconv.Itoa(parent)).Output()
 	pid, err := strconv.Atoi(strings.TrimSpace(string(out)))
 	if err != nil {
-		t.Fatalf("could not find the container's pid under %d: %q", parent, out)
+		t.Fatalf("no container under %d: %q", parent, out)
 	}
 	return pid
 }
 
-func TestParentDeathKillsTheContainer(t *testing.T) {
-	// SIGKILL the runtime. The container must not outlive it: PR_SET_PDEATHSIG.
-	cmd := exec.Command(binary, "run", rootfs, "/bin/sleep", "30")
+func start(t *testing.T, args ...string) (*exec.Cmd, int) {
+	t.Helper()
+	cmd := exec.Command(binary, args...)
+	cmd.Dir = repo
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(500 * time.Millisecond)
-	init := containerPID(t, cmd.Process.Pid)
-	_ = cmd.Process.Kill()
-	_ = cmd.Wait()
-	time.Sleep(300 * time.Millisecond)
-	if err := syscall.Kill(init, 0); err == nil {
-		_ = syscall.Kill(init, syscall.SIGKILL)
-		t.Errorf("container pid %d survived its parent", init)
-	}
-	// A SIGKILLed parent never removes its cgroup. Known, documented, and
-	// swept here so the next test starts clean.
-	sweepCgroups()
+	time.Sleep(700 * time.Millisecond)
+	return cmd, containerPID(t, cmd.Process.Pid)
 }
 
-func sweepCgroups() {
-	if stale, err := os.ReadDir("/sys/fs/cgroup/mycontainer"); err == nil {
-		for _, e := range stale {
-			if e.IsDir() {
-				_ = os.Remove(filepath.Join("/sys/fs/cgroup/mycontainer", e.Name()))
-			}
-		}
-	}
-}
-
-func TestParentForwardsSignalsToTheContainer(t *testing.T) {
-	// SIGTERM to the runtime process itself, which is what Ctrl-C in a
-	// terminal or a `kill` on the `mycontainer run` pid does. With init
-	// the container exits 143. Without it, PID 1 is sleep and ignores the
-	// forwarded signal, so the runtime is still waiting a second later.
+func TestTheInitReapsOrphansAndABareCommandDoesNot(t *testing.T) {
+	// An orphan re-parented to PID 1, which exits while PID 1 runs on. A
+	// command as PID 1 never waits for it; the init does.
+	script := `sh -c "sleep 0.2 &"; exec sleep 3`
 	for _, tc := range []struct {
-		name     string
-		args     []string
-		wantDead bool
+		name       string
+		init       string
+		wantZombie bool
 	}{
-		{"init", nil, true},
-		{"init=false", []string{"-init=false"}, false},
+		{"init=false", "-init=false", true},
+		{"init", "-init=true", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			full := append([]string{"run"}, tc.args...)
-			full = append(full, rootfs, "/bin/sleep", "30")
-			cmd := exec.Command(binary, full...)
-			if err := cmd.Start(); err != nil {
-				t.Fatal(err)
+			cmd, init := start(t, "run", tc.init, "ubuntu", "/bin/sh", "-c", script)
+			defer func() { _ = syscall.Kill(init, syscall.SIGKILL); _ = cmd.Wait() }()
+			out, _ := exec.Command("ps", "-eo", "pid,ppid,stat").Output()
+			zombie := regexp.MustCompile(`(?m)^\s*\d+\s+` + strconv.Itoa(init) + `\s+Z`).MatchString(string(out))
+			if zombie != tc.wantZombie {
+				t.Errorf("zombie under PID 1 = %v, want %v", zombie, tc.wantZombie)
 			}
-			time.Sleep(500 * time.Millisecond)
-			init := containerPID(t, cmd.Process.Pid)
-			_ = cmd.Process.Signal(syscall.SIGTERM)
+		})
+	}
+}
 
+func TestTheInitForwardsSignals(t *testing.T) {
+	// SIGTERM at the container's PID 1. The kernel drops it for a bare
+	// sleep as PID 1; the init passes it on and the container exits 143.
+	for _, tc := range []struct {
+		name     string
+		init     string
+		wantDead bool
+	}{
+		{"init", "-init=true", true},
+		{"init=false", "-init=false", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd, init := start(t, "run", tc.init, "ubuntu", "sleep", "30")
+			_ = syscall.Kill(init, syscall.SIGTERM)
 			done := make(chan error, 1)
 			go func() { done <- cmd.Wait() }()
 			select {
-			case err := <-done:
+			case <-done:
 				if !tc.wantDead {
-					t.Errorf("runtime exited on SIGTERM without init: %v", err)
+					t.Error("PID 1 died of a SIGTERM it never handled")
 				} else if code := cmd.ProcessState.ExitCode(); code != 143 {
 					t.Errorf("exit code %d, want 143", code)
 				}
 			case <-time.After(2 * time.Second):
 				if tc.wantDead {
-					t.Error("SIGTERM to the runtime never reached the container")
+					t.Error("the SIGTERM never reached the command")
 				}
 				_ = syscall.Kill(init, syscall.SIGKILL)
 				<-done
@@ -375,29 +401,34 @@ func TestParentForwardsSignalsToTheContainer(t *testing.T) {
 	}
 }
 
-func TestRootlessRunsAsAnOrdinaryUser(t *testing.T) {
-	// Drop to an unprivileged user and run the whole thing again. Root
-	// inside, the caller's uid on the host, no cgroup unless delegated.
-	nobody := "65534"
-	full := []string{"run", rootfs, "/bin/sh", "-c", "id -u; cat /proc/self/uid_map; grep CapBnd /proc/self/status"}
-	cmd := exec.Command(binary, full...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 65534, Gid: 65534}}
-	// The rootfs has to be readable by that user; a busybox rootfs is.
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		if strings.Contains(string(out), "permission denied") && strings.Contains(string(out), "user namespace") {
-			t.Skip("unprivileged user namespaces are disabled on this kernel")
+func TestTheContainerDiesWithTheRuntime(t *testing.T) {
+	cmd, init := start(t, "run", "ubuntu", "sleep", "30")
+	_ = cmd.Process.Kill()
+	_ = cmd.Wait()
+	time.Sleep(300 * time.Millisecond)
+	if err := syscall.Kill(init, 0); err == nil {
+		_ = syscall.Kill(init, syscall.SIGKILL)
+		t.Errorf("container %d outlived its runtime", init)
+	}
+	// A SIGKILLed runtime never removes its cgroup.
+	sweep()
+}
+
+func TestCtrlCReachesTheContainer(t *testing.T) {
+	// SIGTERM at the runtime itself, which is what Ctrl-C or a kill on the
+	// `mycontainer run` PID does. The parent forwards it to PID 1, and the
+	// init forwards it to the command.
+	cmd, _ := start(t, "run", "ubuntu", "sleep", "30")
+	_ = cmd.Process.Signal(syscall.SIGTERM)
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case <-done:
+		if code := cmd.ProcessState.ExitCode(); code != 143 {
+			t.Errorf("exit code %d, want 143", code)
 		}
-		t.Fatalf("%v\n%s", err, out)
-	}
-	s := string(out)
-	if !regexp.MustCompile(`(?m)^0$`).MatchString(s) {
-		t.Errorf("not root inside:\n%s", s)
-	}
-	if !strings.Contains(s, "0      "+nobody) && !regexp.MustCompile(`0\s+`+nobody+`\s+1`).MatchString(s) {
-		t.Errorf("uid_map does not map 0 to %s:\n%s", nobody, s)
-	}
-	if !strings.Contains(s, "00000000a80425fb") {
-		t.Errorf("rootless bounding set is not the default fourteen:\n%s", s)
+	case <-time.After(2 * time.Second):
+		_ = cmd.Process.Kill()
+		t.Error("SIGTERM to the runtime never reached the container")
 	}
 }

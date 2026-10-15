@@ -31,7 +31,7 @@ provision:
       cp /tmp/lima/../../provision/user-data.yaml /var/lib/cloud/seed/nocloud/user-data 2>/dev/null || true
       # The reliable path: run the file's steps directly.
       apt-get update -qq
-      apt-get install -y -qq busybox-static uidmap strace curl ca-certificates git make tmux
+      apt-get install -y -qq uidmap strace curl ca-certificates git make tmux
       printf 'kernel.apparmor_restrict_unprivileged_userns = 0\nkernel.unprivileged_userns_clone = 1\n' > /etc/sysctl.d/99-crs.conf
       sysctl -e --system
       mkdir -p /etc/systemd/system/user@.service.d

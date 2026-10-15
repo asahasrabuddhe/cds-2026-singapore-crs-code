@@ -7,7 +7,7 @@ own machine or a VM if you would rather not run a container runtime you
 built an hour ago as root on your laptop.
 
 One file, `provision/user-data.yaml`, provisions every VM below. It
-installs Go 1.27, busybox, strace and the uidmap helpers, and writes the
+installs Go 1.27, strace and the uidmap helpers, and writes the
 two sysctls the rootless path needs. Whichever route you take, the box you
 end up with is the same box.
 
@@ -75,7 +75,7 @@ Ubuntu 24.04 or Debian 13, with cgroup v2 (the default on both). Run the
 steps the cloud-init file would have run:
 
 ```bash
-sudo apt-get install -y busybox-static uidmap strace make
+sudo apt-get install -y uidmap strace make
 curl -fsSL https://go.dev/dl/go1.27.1.linux-$(dpkg --print-architecture).tar.gz | sudo tar -C /usr/local -xzf -
 export PATH=$PATH:/usr/local/go/bin
 
@@ -128,9 +128,9 @@ you do not already have if Docker Desktop is installed.
 ```bash
 docker run --rm -it --privileged --cgroupns=private \
   -v "$PWD":/crs -w /crs golang:1.27 bash
-apt-get update && apt-get install -y busybox-static procps
+apt-get update && apt-get install -y procps
 make build rootfs
-./mycontainer run -memory 64m -pids 20 rootfs/busybox /bin/sh
+./mycontainer run ubuntu /bin/bash
 ```
 
 `--cgroupns=private` gives the container its own cgroup root, which is
@@ -166,6 +166,6 @@ sysctl exists and the cloud-init file turns it off.
 | `apparmor_restrict_unprivileged_userns = 0` | Ubuntu's allowlist for user namespaces. At its shipped value of 1, the rootless path is refused. Root is unaffected. |
 | `unshare --user` works | The direct test of the line above. |
 | Go 1.27 | What `go.mod` asks for. |
-| busybox | `scripts/rootfs.sh` turns it into a root filesystem in a second, with no registry and no network. |
+| `rootfs/ubuntu` | The image every demo runs. `make rootfs` pulls `ubuntu:24.04` with `img2rootfs`, once, while there is network. |
 | sudo without a password | The demo script never prompts. Typing along by hand, a prompt is fine. |
 | A container runs, as root and rootless | The whole thing, end to end. |

@@ -42,9 +42,9 @@ $ ./scripts/demo.sh 6                # the user namespace, as an ordinary user
 By hand:
 
 ```console
-$ sudo ./mycontainer run -ns pid,uts -hostname box rootfs/busybox /bin/sh -c 'ls -d /proc/[0-9]* | wc -l'
-$ sudo ./mycontainer run -ns pid,uts,mnt -hostname box rootfs/busybox /bin/sh -c 'ls -d /proc/[0-9]* | wc -l'
-$ ./mycontainer run rootfs/busybox /bin/sh -c 'id; cat /proc/self/uid_map'
+$ sudo ./mycontainer run -ns pid,uts -hostname box ubuntu /bin/sh -c 'ls -d /proc/[0-9]* | wc -l'
+$ sudo ./mycontainer run -ns pid,uts,mnt -hostname box ubuntu /bin/sh -c 'ls -d /proc/[0-9]* | wc -l'
+$ ./mycontainer run ubuntu /bin/sh -c 'id; cat /proc/self/uid_map'
 ```
 
 ## Expected output
@@ -52,13 +52,18 @@ $ ./mycontainer run rootfs/busybox /bin/sh -c 'id; cat /proc/self/uid_map'
 With `pid,uts` only, the hostname is `box`, the shell reports `$$` as a
 low number, and `/proc` lists the host's processes, 26 on the demo box.
 Add `mnt` and the count is 5: the runtime's init at PID 1, the shell, and
-the pipeline counting them. With the default set, `ps` reads:
+the pipeline counting them. With the default set, `sudo ./mycontainer run
+ubuntu ps` reads:
 
 ```
-PID   USER     COMMAND
-    1 root     /proc/self/exe child
-    8 root     /bin/sh -c ps
+    PID TTY          TIME CMD
+      1 ?        00:00:00 exe
+      9 ?        00:00:00 ps
 ```
+
+PID 1 is the runtime's init, `/proc/self/exe` started again. The command
+is a single-digit PID rather than 2, because the init's Go threads take
+IDs from the same namespace first.
 
 Rootless, `id` prints `uid=0(root)`, `/proc/self/uid_map` is one line,
 `0 501 1` on the demo box, and `/proc/<pid>/status` on the host reads `Uid:

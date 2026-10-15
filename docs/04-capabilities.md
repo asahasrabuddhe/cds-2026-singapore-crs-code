@@ -41,9 +41,9 @@ $ ./scripts/demo.sh 4
 By hand:
 
 ```console
-$ sudo ./mycontainer run rootfs/busybox /bin/sh -c 'grep CapBnd /proc/self/status; mount -t tmpfs none /tmp'
-$ sudo ./mycontainer run -caps default,+CAP_SYS_ADMIN rootfs/busybox /bin/sh -c 'mount -t tmpfs none /tmp && echo MOUNTED'
-$ sudo ./mycontainer run -caps all rootfs/busybox /bin/sh -c 'grep CapBnd /proc/self/status'
+$ sudo ./mycontainer run ubuntu /bin/sh -c 'grep CapBnd /proc/self/status; mount -t tmpfs none /tmp'
+$ sudo ./mycontainer run -caps default,+CAP_SYS_ADMIN ubuntu /bin/sh -c 'mount -t tmpfs none /tmp && echo MOUNTED'
+$ sudo ./mycontainer run -caps all ubuntu /bin/sh -c 'grep CapBnd /proc/self/status'
 ```
 
 `-caps` takes a base, `default`, `all` or `none`, followed by `+CAP_X` and
@@ -51,8 +51,8 @@ $ sudo ./mycontainer run -caps all rootfs/busybox /bin/sh -c 'grep CapBnd /proc/
 
 ## Expected output
 
-The first prints `CapBnd: 00000000a80425fb` and `mount: permission denied
-(are you root?)`, which is busybox being funny: it is root. The second
+The first prints `CapBnd: 00000000a80425fb` and `mount: /tmp: permission
+denied.`, from a process that `id` says is root. The second
 prints `CapBnd: 00000000a82425fb` and `MOUNTED`. One bit, bit 21, is the
 difference. The third prints `000001ffffffffff`, all 41, which is what
 `--privileged` means.

@@ -90,8 +90,8 @@ func Pivot(m Mounter, dir string) error {
 		return err
 	}
 
-	// Everything the mounts need has to exist first. A rootfs built from
-	// busybox has no /proc or /dev at all.
+	// Everything the mounts need has to exist first. An image's /sys is
+	// empty, and a rootfs assembled by hand may have no /proc or /dev.
 	for _, d := range []string{"proc", "dev", "sys/fs/cgroup", putOld} {
 		if err := os.MkdirAll(filepath.Join(dir, d), 0o755); err != nil {
 			return err

@@ -41,6 +41,7 @@ const specFD = 3
 
 // Run is the parent half. It returns the container's exit code.
 func Run(s spec.Spec, log io.Writer) (int, error) {
+	fmt.Fprintf(log, "[run] as pid %d\n", os.Getpid())
 	if err := s.Validate(); err != nil {
 		return 0, err
 	}
@@ -174,8 +175,8 @@ func createCgroup(s spec.Spec, log io.Writer) (*cgroup.Group, error) {
 	group, err := cgroup.Create(cgroup.Root, parent, s.ID, s.Limits)
 	if err != nil {
 		if len(s.Limits.Files()) == 0 {
-			fmt.Fprintf(log, "mycontainer: no cgroup for this container: %v\n", err)
-			if os.Geteuid() != 0 {
+			if s.Verbose {
+				fmt.Fprintf(log, "mycontainer: no cgroup for this container: %v\n", err)
 				fmt.Fprintf(log, "mycontainer: rootless needs a delegated cgroup: systemd-run --user --scope -p Delegate=yes ./mycontainer run ...\n")
 			}
 			return nil, nil
@@ -216,6 +217,8 @@ func Child() (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	fmt.Fprintf(os.Stderr, "[child] as pid %d\n", os.Getpid())
+
 	say := func(format string, args ...any) {
 		if s.Verbose {
 			fmt.Fprintf(os.Stderr, "mycontainer[%d]: "+format+"\n", append([]any{os.Getpid()}, args...)...)

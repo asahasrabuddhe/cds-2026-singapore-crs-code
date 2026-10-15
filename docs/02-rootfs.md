@@ -44,15 +44,16 @@ $ ./scripts/demo.sh 2
 By hand:
 
 ```console
-$ sudo ./mycontainer run rootfs/busybox /bin/sh -c 'ls /; cat /etc/os-release; ls -d /.pivot_root; mount'
+$ touch /tmp/host-was-here
+$ sudo ./mycontainer run ubuntu /bin/sh -c 'head -1 /etc/os-release; ls /tmp/host-was-here; ls -d /.pivot_root; mount'
 ```
 
 ## Expected output
 
-`ls /` lists `bin dev etc proc root sbin sys tmp usr`, which is the busybox
-tree and nothing else. `cat /etc/os-release` fails with "No such file or
-directory", because that file is the host's and the host is gone. So does
-`ls -d /.pivot_root`. `mount` lists only what the runtime mounted:
+`/etc/os-release` is the image's, `Ubuntu 24.04.5 LTS`. The file made on
+the host's `/tmp` is not there: "No such file or directory", because the
+host's filesystem is gone. So is `/.pivot_root`, the directory the old
+root was parked in. `mount` lists only what the runtime mounted:
 
 ```
 mac on / type virtiofs (rw,relatime)

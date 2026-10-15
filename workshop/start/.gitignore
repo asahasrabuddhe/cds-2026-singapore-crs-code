@@ -1,2 +1,4 @@
 /mycontainer
-/rootfs/
+
+# A link to the repository's own rootfs/, made by make rootfs.
+/rootfs

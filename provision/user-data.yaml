@@ -15,10 +15,6 @@ package_update: true
 package_upgrade: false
 
 packages:
-  # busybox-static is a whole userland in one binary. scripts/rootfs.sh
-  # turns it into a 1.2 MB root filesystem in under a second, with no
-  # registry, no image and no network, which is what a workshop room needs.
-  - busybox-static
   # newuidmap and newgidmap, for the rootless path.
   - uidmap
   # strace shows the room the syscalls the runtime makes. `strace -f -e
