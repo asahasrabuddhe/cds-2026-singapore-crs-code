@@ -142,7 +142,7 @@ func TestTheHostFilesystemIsGone(t *testing.T) {
 	}
 	defer os.Remove(marker)
 
-	r := run(t, sh("test -e "+marker+" && echo HOST; test -e /.pivot_root && echo OLDROOT; cat /etc/os-release")...)
+	r := run(t, sh("test -e "+marker+" && echo HOST; test -e /.old_root && echo OLDROOT; cat /etc/os-release")...)
 	if strings.Contains(r.stdout, "HOST") {
 		t.Error("a file on the host's /tmp is visible inside")
 	}

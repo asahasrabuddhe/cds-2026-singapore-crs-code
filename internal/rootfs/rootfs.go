@@ -33,7 +33,7 @@ const (
 
 // putOld is where the old root is parked during the pivot, relative to the
 // new root. Deleted again before the container's command runs.
-const putOld = ".pivot_root"
+const putOld = ".old_root"
 
 // Mounter is the five syscalls the pivot needs.
 type Mounter interface {
@@ -145,7 +145,7 @@ func Pivot(m Mounter, dir string) error {
 		{"chdir into rootfs", func() error { return m.Chdir(dir) }, false},
 		{"pivot_root", func() error { return m.PivotRoot(".", putOld) }, false},
 		{"chdir /", func() error { return m.Chdir("/") }, false},
-		// The old root is still mounted at /.pivot_root and everything on
+		// The old root is still mounted at /.old_root and everything on
 		// the host is reachable through it. Detach it, then delete the
 		// directory so nothing even hints that it was there.
 		{"unmount old root", func() error { return m.Unmount(putOld, MNT_DETACH) }, false},

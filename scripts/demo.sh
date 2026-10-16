@@ -122,7 +122,7 @@ demo_2() {
   run ls /tmp/host-was-here
 
   say "Look for it from inside, after pivot_root"
-  SCRIPT='cat /etc/os-release | head -1; ls /tmp/host-was-here; ls -d /.pivot_root'
+  SCRIPT='cat /etc/os-release | head -1; ls /tmp/host-was-here; ls -d /.old_root'
   sh_in
   note "The image's own Ubuntu, and neither the host's file nor the directory"
   note "the old root was parked in during the pivot. There is no path back."

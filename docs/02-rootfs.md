@@ -28,8 +28,8 @@ is there because the one after it fails without it:
    `rootfs/sys/fs/cgroup`, so the container can read its own limits. Both
    are allowed to fail, because a user namespace may only mount them if it
    owns the network and cgroup namespaces respectively.
-6. `chdir(rootfs)`, `pivot_root(".", ".pivot_root")`, `chdir("/")`.
-7. `umount2(".pivot_root", MNT_DETACH)`, then delete the directory.
+6. `chdir(rootfs)`, `pivot_root(".", ".old_root")`, `chdir("/")`.
+7. `umount2(".old_root", MNT_DETACH)`, then delete the directory.
 
 The tests in `internal/rootfs` check that exact sequence against a
 recorder, so a reordering is a failing test rather than a mystery EINVAL
@@ -45,14 +45,14 @@ By hand:
 
 ```console
 $ touch /tmp/host-was-here
-$ sudo ./mycontainer run ubuntu /bin/sh -c 'head -1 /etc/os-release; ls /tmp/host-was-here; ls -d /.pivot_root; mount'
+$ sudo ./mycontainer run ubuntu /bin/sh -c 'head -1 /etc/os-release; ls /tmp/host-was-here; ls -d /.old_root; mount'
 ```
 
 ## Expected output
 
 `/etc/os-release` is the image's, `Ubuntu 24.04.5 LTS`. The file made on
 the host's `/tmp` is not there: "No such file or directory", because the
-host's filesystem is gone. So is `/.pivot_root`, the directory the old
+host's filesystem is gone. So is `/.old_root`, the directory the old
 root was parked in. `mount` lists only what the runtime mounted:
 
 ```

@@ -33,7 +33,7 @@ const (
 
 // putOld is where the old root is parked during the pivot, relative to the
 // new root. Deleted again before the container's command runs.
-const putOld = ".pivot_root"
+const putOld = ".old_root"
 
 // Mounter is the five syscalls the pivot needs.
 type Mounter interface {
