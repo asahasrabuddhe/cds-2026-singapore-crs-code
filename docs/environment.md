@@ -63,8 +63,9 @@ calls. On this box, for `mycontainer run -memory 64m -pids 20 ubuntu
 Read it as: one `clone3` carrying every namespace flag and the cgroup
 descriptor, twelve `mount` calls (the private remount, the bind, `/proc`,
 `/dev`, six device nodes, `/sys`, `/sys/fs/cgroup`), one `pivot_root`, one
-`umount2` of the old root, twenty-seven `prctl(PR_CAPBSET_DROP)` plus a
-handful the Go runtime makes, and three `execve`: the runtime, its child,
+`umount2` of the old root, twenty-seven `prctl(PR_CAPBSET_DROP)` plus the
+Go runtime's `prctl(PR_SET_VMA)` calls, which name its memory (two on
+this kernel, dozens on Ubuntu's own), and three `execve`: the runtime, its child,
 and the command. The plain `clone` calls are the Go runtime starting
 threads in both processes; their number varies from run to run. The `clone3` line itself:
 

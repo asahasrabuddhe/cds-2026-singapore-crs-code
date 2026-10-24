@@ -271,8 +271,9 @@ demo_7() {
   say "Tallied"
   run sh -c "grep -oE '^[0-9]+ +[a-z_0-9]+\(' '$trace' | awk '{print \$2}' | tr -d '(' | sort | uniq -c | sort -rn"
   note "One clone3, with the namespace flags and the cgroup fd. One"
-  note "sethostname, a dozen mounts, one pivot_root, one umount2. About"
-  note "thirty prctl: twenty-seven PR_CAPBSET_DROP plus the Go runtime's."
+  note "sethostname, a dozen mounts, one pivot_root, one umount2."
+  note "Twenty-seven of the prctl calls are PR_CAPBSET_DROP. The rest are"
+  note "the Go runtime naming its memory, and how many depends on the kernel."
   note "Three execve: the runtime, its child, then the command. The plain"
   note "clone calls are the Go runtime starting threads."
 
