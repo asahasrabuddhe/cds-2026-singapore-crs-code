@@ -178,11 +178,15 @@ func Create(root, parent, id string, limits Limits) (*Group, error) {
 
 	if c := limits.controllers(); c != "" {
 		// A cgroup with processes in it may not enable controllers for its
-		// children. As root under "/" that never bites, the root cgroup is
-		// exempt. Under a delegated user scope it always does, because the
-		// shell that started us is sitting there.
-		if err := ensureLeaf(parentDir); err != nil {
-			return nil, err
+		// children. The root cgroup is exempt, which is as well: on a real
+		// machine it holds kernel threads that cannot be moved, so as root
+		// under "/" there is nothing to do. Under a delegated user scope the
+		// rule always bites, because the shell that started us is sitting
+		// there.
+		if filepath.Clean(parent) != "/" {
+			if err := ensureLeaf(parentDir); err != nil {
+				return nil, err
+			}
 		}
 		for _, dir := range []string{parentDir, midDir} {
 			if err := writeFile(filepath.Join(dir, "cgroup.subtree_control"), c); err != nil {

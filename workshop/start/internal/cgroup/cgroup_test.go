@@ -291,6 +291,28 @@ func TestCreateMovesOccupantsToALeafFirst(t *testing.T) {
 	}
 }
 
+func TestCreateUnderTheRootLeavesItsProcessesAlone(t *testing.T) {
+	// The root cgroup is exempt from the "no internal processes" rule, and
+	// on a real machine it holds kernel threads, such as kthreadd as pid 2,
+	// that no write to cgroup.procs can move. Running as root, Create must
+	// not try.
+	root := fakeFS(t)
+	if err := os.WriteFile(filepath.Join(root, "cgroup.procs"), []byte("2\n3\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Create(root, "/", "abc123", Limits{Pids: 10}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(root, "mycontainer-runtime")); !os.IsNotExist(err) {
+		t.Errorf("a leaf was made under the root cgroup: %v", err)
+	}
+	if got := read(t, filepath.Join(root, "cgroup.subtree_control")); got != "+pids" {
+		t.Errorf("root cgroup.subtree_control = %q", got)
+	}
+}
+
 func TestCreateWithNoLimitsStillMakesACgroup(t *testing.T) {
 	// A container with no limits still gets its own cgroup: that is where
 	// `cat /proc/self/cgroup` inside it points, and it is the handle the
