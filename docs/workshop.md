@@ -109,7 +109,8 @@ $ sudo ./mycontainer run ubuntu /bin/sh -c 'ps; ls /; ls /tmp; mount'
 
 Two processes. The Ubuntu image's tree. An empty `/tmp`, without the file
 you just made on the host. A mount table with
-nothing from the host on it.
+only the container's own mounts. On a VM, `/` names the VM's disk,
+because the root is a bind mount of a directory on it.
 
 ### Step 3: cgroups, what it can use
 

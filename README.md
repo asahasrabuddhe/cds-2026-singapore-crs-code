@@ -60,7 +60,7 @@ sudo ./mycontainer run ubuntu /bin/sh
 ```
 
 PID 1 is the runtime's init and the shell is its child, `ls /` is the Ubuntu
-tree, `mount` shows nothing from the host, and `mount -t tmpfs none /tmp`
+tree, `mount` shows only the container's own mounts, and `mount -t tmpfs none /tmp`
 is refused. Flags turn each piece on or off:
 
 ```bash

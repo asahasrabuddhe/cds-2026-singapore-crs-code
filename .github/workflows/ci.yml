@@ -56,8 +56,8 @@ jobs:
       - run: go test ./...
 
   # Real containers, as root, on the runner's own kernel. The runner is
-  # Ubuntu on cgroup v2 with unprivileged user namespaces allowed, which
-  # is the same shape as the workshop VM.
+  # Ubuntu on cgroup v2, the same shape as the workshop VM once it has the
+  # one sysctl that provision/user-data.yaml writes.
   test-root:
     runs-on: ubuntu-latest
     needs: test
@@ -68,6 +68,8 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27"
+      - name: allow user namespaces, as provision/user-data.yaml does
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: pre-flight
         run: ./scripts/check.sh
       - name: integration tests
