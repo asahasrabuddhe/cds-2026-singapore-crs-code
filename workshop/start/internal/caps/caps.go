@@ -88,7 +88,8 @@ type Set struct {
 // that mounts, is not among them.
 func Default() Set {
 	// TODO(step 4): the fourteen Docker grants by default. The constants
-	// at the top of this file are exactly that list; add each one.
+	// at the top of this file are those fourteen plus SysAdmin, the one
+	// Docker leaves out; add the fourteen.
 	// Tests: go test ./internal/caps/
 	var s Set
 	return s

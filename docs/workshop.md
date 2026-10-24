@@ -41,12 +41,12 @@ go test ./...       # six packages fail on Linux. That is the syllabus.
 | Time | Step | File | Test | Checkpoint |
 |---|---|---|---|---|
 | 0:00 | Setup check and the shape of the thing | | `./scripts/check.sh` | a box that says `ready` |
-| 0:06 | **1. Namespaces** | `internal/namespace/namespace.go`, `internal/container/container_linux.go` | `go test ./internal/namespace/` | `hostname` inside differs; `ps` still shows the host |
-| 0:11 | **2. Rootfs** | `internal/rootfs/rootfs.go` | `go test ./internal/rootfs/` | `ps` shows two processes; `ls /` is the image; a file on the host's `/tmp` is gone |
-| 0:21 | **3. cgroups** | `internal/cgroup/cgroup.go`, `container_linux.go` | `go test ./internal/cgroup/` | a fork bomb is refused; `cat /sys/fs/cgroup/pids.max` inside reads the limit |
-| 0:29 | **4. Capabilities** | `internal/caps/caps.go` | `go test ./internal/caps/` | `mount` inside is refused; `CapBnd` reads `a80425fb` |
-| 0:33 | **5. Init** | `internal/initproc/initproc_linux.go` | `go test ./internal/initproc/` | no zombie under PID 1 after an orphan exits |
-| 0:40 | Wrap: the syscalls, counted | | | |
+| 0:04 | **1. Namespaces** | `internal/namespace/namespace.go`, `internal/container/container_linux.go` | `go test ./internal/namespace/` | `hostname` inside differs; `ps` still shows the host |
+| 0:09 | **2. Rootfs** | `internal/rootfs/rootfs.go` | `go test ./internal/rootfs/` | `ps` shows two processes; `ls /` is the image; a file on the host's `/tmp` is gone |
+| 0:19 | **3. cgroups** | `internal/cgroup/cgroup.go`, `container_linux.go` | `go test ./internal/cgroup/` | a fork bomb is refused; `cat /sys/fs/cgroup/pids.max` inside reads the limit |
+| 0:26 | **4. Capabilities** | `internal/caps/caps.go` | `go test ./internal/caps/` | `mount` inside is refused; `CapBnd` reads `a80425fb` |
+| 0:31 | **5. Init** | `internal/initproc/initproc_linux.go` | `go test ./internal/initproc/` | no zombie under PID 1 after an orphan exits |
+| 0:38 | Wrap: the syscalls, counted | | | |
 | At home | Rootless | `container_linux.go` | | `./mycontainer run` without sudo prints `uid=0` |
 
 Each step below says what to write, what the test wants, and what to run
@@ -138,11 +138,11 @@ $ sudo ./mycontainer run -pids 20 ubuntu /bin/sh -c 'cat /sys/fs/cgroup/pids.max
 $ sudo ./mycontainer run -memory 64m ubuntu /bin/sh -c 'a=$(head -c 100000000 /dev/zero | tr "\0" x); echo survived'; echo $?
 ```
 
-`20`, then `can't fork`. Then nothing, and 137.
+`20`, then `Cannot fork`. Then nothing, and 137.
 
 Two things you will hit if you go off the path. The init is a Go program
-inside the cgroup, and `pids.max` counts its threads, so below about 16 the
-init dies before the bomb does. And cgroup v2 refuses to enable controllers
+inside the cgroup, and `pids.max` counts its threads, so with too low a limit
+the init dies before the bomb does. Keep it at sixteen or more. And cgroup v2 refuses to enable controllers
 in a directory that has processes in it; `Create` handles that with a leaf,
 and it is why the runtime as root creates its groups directly under
 `/sys/fs/cgroup`, which is exempt.
@@ -151,7 +151,7 @@ and it is why the runtime as root creates its groups directly under
 
 `Default()` in `internal/caps/caps.go` returns the fourteen capabilities
 Docker grants a container that asked for nothing. The constants at the top
-of the file are exactly that list. `DropBounding` in `caps_linux.go`
+of the file are those fourteen plus `SysAdmin`, the one Docker leaves out. `DropBounding` in `caps_linux.go`
 already removes everything not in the set from the bounding set, one
 `prctl(PR_CAPBSET_DROP)` each.
 
