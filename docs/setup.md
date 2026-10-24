@@ -166,6 +166,6 @@ sysctl exists and the cloud-init file turns it off.
 | `apparmor_restrict_unprivileged_userns = 0` | Ubuntu's allowlist for user namespaces. At its shipped value of 1, the rootless path is refused. Root is unaffected. |
 | `unshare --user` works | The direct test of the line above. |
 | Go 1.27 | What `go.mod` asks for. |
-| `rootfs/ubuntu` | The image every demo runs. `make rootfs` pulls `ubuntu:24.04` with `img2rootfs`, once, while there is network. |
+| `rootfs/ubuntu` | The image every demo runs. `make rootfs` pulls `ubuntu:26.04` with `img2rootfs`, once, while there is network. |
 | sudo without a password | The demo script never prompts. Typing along by hand, a prompt is fine. |
 | A container runs, as root and rootless | The whole thing, end to end. |

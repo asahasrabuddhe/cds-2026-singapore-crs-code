@@ -479,6 +479,12 @@ func ApplyLayer(dest string, r io.Reader) error {
 			if err := os.MkdirAll(full, 0o755); err != nil {
 				return err
 			}
+			// Red Hat and SUSE images ship directories such as /root as
+			// 0550. As root that is no obstacle; as you, the next entry
+			// inside would fail, so keep the owner's write bit.
+			if os.Geteuid() != 0 {
+				mode |= 0o700
+			}
 			if err := os.Chmod(full, mode); err != nil {
 				return err
 			}

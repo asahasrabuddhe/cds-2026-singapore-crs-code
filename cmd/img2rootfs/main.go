@@ -2,7 +2,7 @@
 // that mycontainer can use as a root filesystem.
 //
 //	img2rootfs alpine:3.22                 # writes rootfs/alpine
-//	img2rootfs -o /tmp/ubuntu ubuntu:24.04
+//	img2rootfs -o /tmp/ubuntu ubuntu:26.04
 //
 // No Docker daemon, no containerd, no library: the registry protocol is
 // three GETs and a token, and an image layer is a tarball. Both fit in one

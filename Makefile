@@ -1,4 +1,4 @@
-.PHONY: build check fmt vet test test-root lint rootfs clean vm vm-shell vm-down
+.PHONY: build check fmt vet test test-root lint rootfs rootfs-all clean vm vm-shell vm-down
 
 # The binaries land at the repo root, where the demo types them.
 build:
@@ -37,7 +37,38 @@ rootfs: rootfs/ubuntu
 
 rootfs/ubuntu:
 	go build -o img2rootfs ./cmd/img2rootfs
-	./img2rootfs -o rootfs/ubuntu ubuntu:24.04
+	./img2rootfs -o rootfs/ubuntu ubuntu:26.04
+
+# Six more distributions, to show the runtime does not care which one it
+# runs: Debian, two Red Hat family, Alpine, openSUSE and Void. `make rootfs-all`
+# pulls them all, or `make rootfs/alpine` for one.
+ROOTFS_ALL = ubuntu debian13 al2023 rocky9 alpine opensuse void
+
+rootfs-all: $(addprefix rootfs/,$(ROOTFS_ALL))
+
+rootfs/void:
+	go build -o img2rootfs ./cmd/img2rootfs
+	./img2rootfs -o $@ ghcr.io/void-linux/void-glibc:latest
+
+rootfs/debian13:
+	go build -o img2rootfs ./cmd/img2rootfs
+	./img2rootfs -o $@ debian:13-slim
+
+rootfs/al2023:
+	go build -o img2rootfs ./cmd/img2rootfs
+	./img2rootfs -o $@ amazonlinux:2023
+
+rootfs/rocky9:
+	go build -o img2rootfs ./cmd/img2rootfs
+	./img2rootfs -o $@ rockylinux:9
+
+rootfs/alpine:
+	go build -o img2rootfs ./cmd/img2rootfs
+	./img2rootfs -o $@ alpine:3.22
+
+rootfs/opensuse:
+	go build -o img2rootfs ./cmd/img2rootfs
+	./img2rootfs -o $@ opensuse/leap:15.6
 
 clean:
 	rm -f mycontainer img2rootfs

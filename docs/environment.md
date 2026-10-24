@@ -15,7 +15,7 @@ re-run the commands if this repository is more than a few months old.
 | Distribution | Ubuntu 24.04.5 LTS | `lsb_release -d` |
 | Kernel | 7.0.14-orbstack, aarch64 | `uname -r` |
 | Go | 1.27.1 | `go version` |
-| Image | `ubuntu:24.04`, layer `90812e242c93` | `make rootfs`; `head -1 rootfs/ubuntu/etc/os-release` |
+| Image | `ubuntu:26.04`, layer `06db5ba23986` | `make rootfs`; `head -1 rootfs/ubuntu/etc/os-release` |
 | strace | 6.8 | `strace -V` |
 | uidmap (shadow) | 1:4.13+dfsg1-4ubuntu3.2 | `dpkg -s uidmap` |
 

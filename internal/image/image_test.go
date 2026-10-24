@@ -161,6 +161,24 @@ func TestApplyLayerExtractsFilesDirsAndSymlinks(t *testing.T) {
 	}
 }
 
+func TestApplyLayerFillsAReadOnlyDirectoryAsAnOrdinaryUser(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root writes into anything; the bug is an unprivileged one")
+	}
+	dest := t.TempDir()
+	// Rocky, Amazon Linux and openSUSE ship /root as 0550.
+	layer := makeTar(t,
+		entry{name: "root/", mode: 0o550},
+		entry{name: "root/.bash_logout", content: "clear\n"},
+	)
+	if err := ApplyLayer(dest, bytes.NewReader(layer)); err != nil {
+		t.Fatal(err)
+	}
+	if got := readFile(t, filepath.Join(dest, "root", ".bash_logout")); got != "clear\n" {
+		t.Errorf(".bash_logout = %q", got)
+	}
+}
+
 func TestApplyLayerWhiteoutRemovesAFile(t *testing.T) {
 	dest := t.TempDir()
 	base := makeTar(t, entry{name: "etc/"}, entry{name: "etc/old", content: "x"}, entry{name: "etc/keep", content: "y"})

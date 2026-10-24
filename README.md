@@ -31,7 +31,7 @@ cd ~/crs && ./scripts/check.sh
 ```
 
 When it prints `ready`, you are ready. The pre-flight also pulls the image
-every container runs, `ubuntu:24.04`, into `rootfs/ubuntu` with
+every container runs, `ubuntu:26.04`, into `rootfs/ubuntu` with
 `img2rootfs`, so run it while you have network.
 
 ## In the workshop
@@ -55,7 +55,7 @@ are stuck, and what `scripts/demo.sh` runs.
 
 ```bash
 make build         # ./mycontainer and ./img2rootfs
-make rootfs        # pulls ubuntu:24.04 into rootfs/ubuntu; needs network
+make rootfs        # pulls ubuntu:26.04 into rootfs/ubuntu; needs network
 sudo ./mycontainer run ubuntu /bin/sh
 ```
 
