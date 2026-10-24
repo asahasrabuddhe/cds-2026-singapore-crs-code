@@ -6,3 +6,6 @@
 # Root filesystems built by scripts/rootfs.sh or cmd/img2rootfs. Large,
 # and rebuilt in seconds.
 /rootfs/
+
+# The multipass client caches its update check in the working directory.
+/network-cache/

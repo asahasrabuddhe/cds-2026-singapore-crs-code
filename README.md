@@ -16,15 +16,14 @@ The slides live in a sibling repository,
 
 ## Before the workshop
 
-You need a Linux box that passes the pre-flight. [`docs/setup.md`](docs/setup.md)
-has one for Windows, macOS and Linux, all provisioned from the same
-cloud-init file; Multipass is the route that works the same way on all
-three. Do this before the day: forty-five minutes has no room for a VM
-install, and the image is a download.
+Everyone works in the same Ubuntu VM, made with
+[Multipass](https://canonical.com/multipass) on Windows, macOS or Linux.
+[`docs/setup.md`](docs/setup.md) has the install for each. Do this before
+the day: forty-five minutes has no room for a VM install, and the image
+is a download.
 
 ```bash
-multipass launch 24.04 --name crs --cpus 2 --memory 4G --disk 20G \
-  --cloud-init provision/user-data.yaml
+multipass launch 24.04 --name crs --cpus 2 --memory 4G --disk 20G --cloud-init https://raw.githubusercontent.com/asahasrabuddhe/cds-2026-singapore-crs-code/main/provision/user-data.yaml
 multipass shell crs
 git clone https://github.com/asahasrabuddhe/cds-2026-singapore-crs-code.git ~/crs
 cd ~/crs && ./scripts/check.sh

@@ -75,10 +75,10 @@ clean:
 	rm -rf rootfs
 
 # ---------------------------------------------------------------- the VM ---
-# One cloud-init file, provision/user-data.yaml, for every VM. These
-# targets drive OrbStack or Multipass; see docs/setup.md.
+# The same Multipass VM as everyone else's, from provision/user-data.yaml;
+# see docs/setup.md.
 
-VM ?= crs-dev
+VM ?= crs
 
 vm:
 	./scripts/vm.sh up $(VM)

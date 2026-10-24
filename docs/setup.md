@@ -1,160 +1,80 @@
 # Setup
 
 Everything in this repository runs on a Linux kernel, because namespaces,
-cgroups, pivot_root and capabilities are Linux kernel features. On Windows
-and macOS that means a virtual machine, and on Linux it means either your
-own machine or a VM if you would rather not run a container runtime you
-built an hour ago as root on your laptop.
+cgroups, pivot_root and capabilities are Linux kernel features. So
+everyone, on Windows, macOS or Linux, works in the same Ubuntu 24.04 VM,
+made the same way with [Multipass](https://canonical.com/multipass). One
+tool and one procedure for the whole room, and a container runtime you
+built an hour ago runs as root in a VM rather than on your laptop.
 
-One file, `provision/user-data.yaml`, provisions every VM below. It
-installs Go 1.27, strace and the uidmap helpers, and writes the
-two sysctls the rootless path needs. Whichever route you take, the box you
-end up with is the same box.
+One file, `provision/user-data.yaml`, provisions the VM. It installs Go
+1.27, strace and the uidmap helpers, and writes the sysctl the rootless
+path needs.
 
-When you are done, run the pre-flight inside it:
+Do this before the day. Forty-five minutes has no room for a VM install,
+and the Ubuntu image is a download of about 600 MB.
 
-```bash
-./scripts/check.sh
-```
-
-It prints one line per requirement, OK or FAIL, and ends with `ready` or
-`not ready`. Every FAIL says what to do about it. If it says ready, you are
-ready, and nothing else on this page matters.
-
-## Route A: Multipass, on Windows, macOS or Linux
-
-[Multipass](https://canonical.com/multipass) is Canonical's VM tool. It
-installs the same way on all three operating systems, takes a cloud-init
-file, and gives you an Ubuntu 24.04 machine in about two minutes. This is
-the route the workshop assumes.
-
-Install it:
+## 1. Install Multipass
 
 - Windows: `winget install Canonical.Multipass`, or the installer from the
-  site. It uses Hyper-V, which needs Windows 10 Pro or later, or
-  VirtualBox on Home editions.
+  site. It uses Hyper-V, which needs Windows 10 or 11 Pro, Enterprise or
+  Education. On Windows Home, pick VirtualBox in the installer.
 - macOS: `brew install --cask multipass`, or the installer from the site.
 - Linux: `sudo snap install multipass`.
 
-Then, from a clone of this repository:
+## 2. Make the VM
+
+From any terminal on your machine. The same command on all three
+operating systems:
 
 ```bash
-multipass launch 24.04 --name crs --cpus 2 --memory 4G --disk 20G \
-  --cloud-init provision/user-data.yaml
+multipass launch 24.04 --name crs --cpus 2 --memory 4G --disk 20G --cloud-init https://raw.githubusercontent.com/asahasrabuddhe/cds-2026-singapore-crs-code/main/provision/user-data.yaml
+```
+
+The VM boots in a minute or two, then provisions itself in the
+background: packages, then Go. `multipass exec crs -- cat /etc/crs-provisioned`
+prints the Go version when it is done.
+
+## 3. Get the code, and check the box
+
+```bash
 multipass shell crs
-```
-
-Inside the VM, get the code and check the box:
-
-```bash
 git clone https://github.com/asahasrabuddhe/cds-2026-singapore-crs-code.git ~/crs
-cd ~/crs
-./scripts/check.sh
+cd ~/crs && ./scripts/check.sh
 ```
 
-Provisioning runs in the background after the VM boots. If `check.sh`
-says Go is not on PATH, it has not finished yet; `cat /etc/crs-provisioned`
-appears when it has, and `sudo cloud-init status --long` says what it is
-doing.
+The pre-flight prints one line per requirement, OK or FAIL, and ends with
+`ready` or `not ready`. Every FAIL says what to do about it. It also
+pulls the image every container runs, `ubuntu:26.04`, into
+`rootfs/ubuntu`, so run it while you have network. If it says `ready`,
+you are ready, and nothing else on this page matters.
 
-Cloning inside the VM is the path of least surprise. If you would rather
-edit on the host, mount the checkout instead:
+## In the workshop
 
-```bash
-multipass mount . crs:/home/ubuntu/crs
-```
+Everything happens inside the VM. Open two terminals and run
+`multipass shell crs` in each: one to edit, one to build and test. `vim`
+and `nano` are both there. The code lives on the VM's own disk, not
+shared from your machine, so the runtime sees an ordinary Linux
+filesystem.
 
-On Windows that needs `multipass set local.privileged-mounts=true` first,
-and the mount is slower than a local disk. `scripts/vm.sh` wraps all of
-this: `./scripts/vm.sh up` creates and mounts, `./scripts/vm.sh shell`
-lands you in the repository.
+Afterwards, `multipass delete --purge crs` removes the VM and everything
+in it.
 
-## Route B: Linux, on the machine itself
+## When it does not work
 
-Ubuntu 24.04 or Debian 13, with cgroup v2 (the default on both). Run the
-steps the cloud-init file would have run:
+**`check.sh` says Go is not on PATH.** Provisioning has not finished.
+`sudo cloud-init status --long` inside the VM says what it is doing.
+Wait for `/etc/crs-provisioned`, then log out and `multipass shell crs`
+again.
 
-```bash
-sudo apt-get install -y uidmap strace make
-curl -fsSL https://go.dev/dl/go1.27.1.linux-$(dpkg --print-architecture).tar.gz | sudo tar -C /usr/local -xzf -
-export PATH=$PATH:/usr/local/go/bin
+**`multipass launch` times out.** The image download is slow. The VM
+usually finishes anyway; `multipass list` shows it. If it does not,
+`multipass delete --purge crs` and run the launch again.
 
-# The rootless path only. Ubuntu 23.10+ refuses user namespaces to any
-# binary without an AppArmor profile; Debian has an older on/off switch.
-sudo tee /etc/sysctl.d/99-crs.conf <<'EOF'
-kernel.apparmor_restrict_unprivileged_userns = 0
-kernel.unprivileged_userns_clone = 1
-EOF
-sudo sysctl -e --system
-```
+**Windows says Hyper-V is not available.** Windows Home has no Hyper-V.
+Reinstall Multipass and choose VirtualBox as the driver.
 
-Then `./scripts/check.sh`. Other distributions work if they are on cgroup
-v2 and allow unprivileged user namespaces; the pre-flight will tell you.
-
-## Route C: WSL2, on Windows
-
-WSL2 runs a real Linux kernel, so the runtime works there, with two
-settings. First, systemd, so that cgroup v2 is mounted where the runtime
-looks for it. In `/etc/wsl.conf` inside the distribution:
-
-```ini
-[boot]
-systemd=true
-```
-
-Second, the kernel command line, in `%USERPROFILE%\.wslconfig` on the
-Windows side:
-
-```ini
-[wsl2]
-kernelCommandLine = cgroup_no_v1=all
-```
-
-Then `wsl --shutdown`, start Ubuntu 24.04 again, and follow Route B inside
-it. The pre-flight checks the cgroup mount specifically, because this is
-the setting that most often is not what you expect. If it reports cgroup
-v1, use Route A instead of debugging WSL on the morning of a workshop.
-
-This route is documented from Microsoft's WSL documentation and was not
-exercised while writing this repository. Routes A, B and D were.
-
-## Route D: Docker Desktop, as a fallback
-
-A privileged container is a Linux environment with a kernel underneath
-it, and the runtime runs inside one. It is a container inside a
-container, so it proves less than the other routes, but it needs nothing
-you do not already have if Docker Desktop is installed.
-
-```bash
-docker run --rm -it --privileged --cgroupns=private \
-  -v "$PWD":/crs -w /crs golang:1.27 bash
-apt-get update && apt-get install -y procps
-make build rootfs
-./mycontainer run ubuntu /bin/bash
-```
-
-`--cgroupns=private` gives the container its own cgroup root, which is
-what lets the runtime create cgroups under it. The rootless path does not
-work here, because the container's filesystem belongs to root and the
-rootfs has to be writable by whoever runs the container. Everything with
-root does.
-
-## The presenter's box
-
-The talk is rehearsed and delivered from an [OrbStack](https://orbstack.dev)
-machine, because it boots in seconds and shares the Mac's filesystem at
-the same path. Same cloud-init file:
-
-```bash
-make vm          # orb create -c provision/user-data.yaml ubuntu:noble crs-dev
-make vm-shell
-```
-
-One thing to know about OrbStack: it runs its own kernel, without the
-`apparmor_restrict_unprivileged_userns` sysctl. That is convenient, since
-the rootless path just works, and it is why the pre-flight prints "not on
-this kernel" for that line rather than a value. On a stock Ubuntu box the
-sysctl exists and the cloud-init file turns it off.
+**Anything else on the day.** Pair with a neighbour and fix it after.
 
 ## What the pre-flight checks, and why
 
