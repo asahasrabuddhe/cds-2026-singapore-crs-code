@@ -79,7 +79,6 @@ func Run(s spec.Spec, log io.Writer) (int, error) {
 	_ = specWrite.Close()
 
 	// ----------------------------------------------------------- clone ---
-	// snippet:start clone
 	// The same binary, again, as "mycontainer child". Everything that
 	// makes it a container and not a process happens inside clone(2),
 	// through SysProcAttr.
@@ -91,7 +90,6 @@ func Run(s spec.Spec, log io.Writer) (int, error) {
 	if err := cmd.Start(); err != nil {
 		return 0, fmt.Errorf("start container: %w", err)
 	}
-	// snippet:end clone
 	_ = specRead.Close()
 
 	if s.Verbose {
@@ -129,31 +127,16 @@ func Run(s spec.Spec, log io.Writer) (int, error) {
 // container. Six clone flags, a cgroup to be born into, and, when running
 // unprivileged, one line of UID mapping.
 func sysProcAttr(s spec.Spec, group *cgroup.Group) *syscall.SysProcAttr {
-	// snippet:start sysprocattr
 	attr := &syscall.SysProcAttr{
-		Cloneflags: s.Namespaces.CloneFlags(),
-		// If this parent dies, the kernel kills the container. Otherwise a
-		// runtime that is SIGKILLed leaves its container running under the
-		// host's PID 1 with nobody to report to.
+		// If this parent dies, the kernel kills the container.
 		Pdeathsig: syscall.SIGKILL,
 	}
-	if group != nil {
-		attr.UseCgroupFD = true
-		attr.CgroupFD = group.FD
-	}
-	if s.Namespaces.User {
-		// One line each: container UID 0 is our own UID. No range, no
-		// newuidmap, no /etc/subuid. Enough to be root in here and nobody
-		// out there.
-		attr.UidMappings = []syscall.SysProcIDMap{
-			{ContainerID: 0, HostID: os.Getuid(), Size: 1},
-		}
-		attr.GidMappings = []syscall.SysProcIDMap{
-			{ContainerID: 0, HostID: os.Getgid(), Size: 1},
-		}
-		attr.GidMappingsEnableSetgroups = false
-	}
-	// snippet:end sysprocattr
+	// TODO(step 1): attr.Cloneflags from s.Namespaces.CloneFlags().
+	// TODO(step 3): if group != nil, UseCgroupFD and CgroupFD = group.FD,
+	// so the child is born inside its cgroup (CLONE_INTO_CGROUP).
+	// TODO(step 6, if there is time): when s.Namespaces.User, one
+	// UidMappings and one GidMappings entry, container 0 to os.Getuid()
+	// and os.Getgid(), size 1, and GidMappingsEnableSetgroups false.
 	return attr
 }
 
@@ -226,7 +209,6 @@ func Child() (int, error) {
 	}
 	say("child running, namespaces %s", s.Namespaces)
 
-	// snippet:start child
 	// 1. Hostname. Only visible in here, because of CLONE_NEWUTS. If the
 	//    clone flags did not include it, this process shares the host's
 	//    UTS namespace and would rename the host; refuse rather than do
@@ -273,7 +255,6 @@ func Child() (int, error) {
 	}
 	say("exec %s as pid 1", path)
 	return 0, syscall.Exec(path, s.Args, s.Env)
-	// snippet:end child
 }
 
 // sameNamespace reports whether this process is in the same namespace of

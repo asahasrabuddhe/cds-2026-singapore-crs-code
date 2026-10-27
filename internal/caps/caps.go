@@ -87,15 +87,11 @@ type Set struct {
 // did not ask for anything. Fourteen of forty-one. CAP_SYS_ADMIN, the one
 // that mounts, is not among them.
 func Default() Set {
-	// snippet:start default-caps
+	// TODO(step 4): the fourteen Docker grants by default. The constants
+	// at the top of this file are those fourteen plus SysAdmin, the one
+	// Docker leaves out; add the fourteen.
+	// Tests: go test ./internal/caps/
 	var s Set
-	for _, c := range []int{
-		AuditWrite, Chown, DacOverride, Fowner, Fsetid, Kill, Mknod,
-		NetBindService, NetRaw, Setfcap, Setgid, Setpcap, Setuid, SysChroot,
-	} {
-		s.Add(c)
-	}
-	// snippet:end default-caps
 	return s
 }
 

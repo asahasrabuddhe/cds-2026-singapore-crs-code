@@ -77,24 +77,9 @@ func (s Set) CloneFlags() uintptr {
 	if s.PID {
 		f |= syscall.CLONE_NEWPID
 	}
-	if s.Mount {
-		f |= syscall.CLONE_NEWNS
-	}
-	if s.UTS {
-		f |= syscall.CLONE_NEWUTS
-	}
-	if s.IPC {
-		f |= syscall.CLONE_NEWIPC
-	}
-	if s.Net {
-		f |= syscall.CLONE_NEWNET
-	}
-	if s.User {
-		f |= syscall.CLONE_NEWUSER
-	}
-	if s.Cgroup {
-		f |= syscall.CLONE_NEWCGROUP
-	}
+	// TODO(step 1): the other six, the same way. Mount is
+	// syscall.CLONE_NEWNS; the rest are CLONE_NEW and their own name.
+	// Tests: go test ./internal/namespace/
 	return f
 }
 

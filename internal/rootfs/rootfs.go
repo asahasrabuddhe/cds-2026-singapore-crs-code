@@ -85,58 +85,23 @@ func Pivot(m Mounter, dir string) error {
 	}
 
 	steps := []struct {
-		name string
-		do   func() error
-		// optional steps may fail without failing the container. The two
-		// /sys mounts are: the kernel only lets a user namespace mount
-		// sysfs if it owns the network namespace, and cgroup2 if it owns
-		// the cgroup namespace, so a container started with fewer
-		// namespaces than the default loses them and nothing else.
+		name     string
+		do       func() error
 		optional bool
 	}{
-		// Mount events in this namespace must not propagate back to the
-		// host, or unmounting the old root below unmounts the host's root.
-		// systemd makes every mount shared by default, so this is not
-		// optional.
-		{"make / private", func() error {
-			return m.Mount("", "/", "", syscall.MS_REC|syscall.MS_PRIVATE, "")
-		}, false},
-		// pivot_root requires new_root to be a mount point. A directory is
-		// not one until it is bind-mounted onto itself.
-		{"bind rootfs to itself", func() error {
-			return m.Mount(dir, dir, "", syscall.MS_BIND|syscall.MS_REC, "")
-		}, false},
-		// procfs is per PID namespace: mounted here, from inside the new PID
-		// namespace, it shows the container's processes and nothing else.
-		{"mount /proc", func() error {
-			return m.Mount("proc", filepath.Join(dir, "proc"), "proc", syscall.MS_NOEXEC|syscall.MS_NOSUID|syscall.MS_NODEV, "")
-		}, false},
-		{"mount /dev", func() error {
-			return m.Mount("tmpfs", filepath.Join(dir, "dev"), "tmpfs", syscall.MS_NOSUID|syscall.MS_STRICTATIME, "mode=755,size=65536k")
-		}, false},
-		{"populate /dev", func() error { return populateDev(m, dir) }, false},
-		// Read-only, the way Docker mounts it. Writable sysfs is a way out.
-		{"mount /sys", func() error {
-			return m.Mount("sysfs", filepath.Join(dir, "sys"), "sysfs", syscall.MS_RDONLY|syscall.MS_NOSUID|syscall.MS_NODEV|syscall.MS_NOEXEC, "")
-		}, true},
-		// The container's own cgroup, seen from inside. With a cgroup
-		// namespace this is the container's leaf, so `cat
-		// /sys/fs/cgroup/memory.max` in here reads the limit set out there.
-		{"mount /sys/fs/cgroup", func() error {
-			return m.Mount("cgroup2", filepath.Join(dir, "sys", "fs", "cgroup"), "cgroup2", syscall.MS_NOSUID|syscall.MS_NODEV|syscall.MS_NOEXEC, "")
-		}, true},
-		// snippet:start pivot
-		// pivot_root wants to be called from inside new_root, with put_old
-		// underneath it. "." is new_root once we are standing in it.
-		{"chdir into rootfs", func() error { return m.Chdir(dir) }, false},
-		{"pivot_root", func() error { return m.PivotRoot(".", putOld) }, false},
-		{"chdir /", func() error { return m.Chdir("/") }, false},
-		// The old root is still mounted at /.old_root and everything on
-		// the host is reachable through it. Detach it, then delete the
-		// directory so nothing even hints that it was there.
-		{"unmount old root", func() error { return m.Unmount(putOld, syscall.MNT_DETACH) }, false},
-		{"remove old root dir", func() error { return m.Remove(putOld) }, false},
-		// snippet:end pivot
+		// TODO(step 2): the sequence, in order. Each step is a mount or a
+		// syscall through m. docs/workshop.md lists the seven, and the test
+		// in rootfs_test.go pins the exact order and flags.
+		//
+		//   1. make / private, recursively (or the unmount at the end
+		//      propagates to the host)
+		//   2. bind rootfs onto itself (pivot_root wants a mount point)
+		//   3. proc on rootfs/proc
+		//   4. tmpfs on rootfs/dev, then populateDev
+		//   5. sysfs on rootfs/sys (optional), cgroup2 on
+		//      rootfs/sys/fs/cgroup (optional)
+		//   6. chdir(rootfs), pivot_root(".", putOld), chdir("/")
+		//   7. unmount putOld with MNT_DETACH, remove putOld
 	}
 
 	for _, s := range steps {

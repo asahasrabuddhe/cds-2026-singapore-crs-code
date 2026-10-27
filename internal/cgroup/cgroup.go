@@ -82,32 +82,18 @@ func ParseMemory(s string) (int64, error) {
 // cpuMax formats cpu.max: "<quota> <period>" in microseconds. The period is
 // the kernel's default of 100ms, so 0.5 CPUs is 50ms of every 100ms.
 func cpuMax(cpus float64) string {
-	const period = 100000
-	if cpus <= 0 {
-		return fmt.Sprintf("max %d", period)
-	}
-	return fmt.Sprintf("%d %d", int64(cpus*period), period)
+	// TODO(step 3): the kernel's period is 100000 microseconds. 0.5 CPUs
+	// is half of that as the quota; zero or less is "max".
+	return ""
 }
 
 // Files is the cgroup files to write, keyed by filename.
 func (l Limits) Files() map[string]string {
-	// snippet:start limit-files
-	files := make(map[string]string)
-	if l.Memory > 0 {
-		files["memory.max"] = strconv.FormatInt(l.Memory, 10)
-		// Without this a process at memory.max keeps going into swap, and
-		// the limit is a suggestion. Docker sets swap to the same value as
-		// memory when you only pass --memory; zero is the honest version.
-		files["memory.swap.max"] = "0"
-	}
-	if l.CPUs > 0 {
-		files["cpu.max"] = cpuMax(l.CPUs)
-	}
-	if l.Pids > 0 {
-		files["pids.max"] = strconv.Itoa(l.Pids)
-	}
-	// snippet:end limit-files
-	return files
+	// TODO(step 3): memory.max in bytes (and memory.swap.max, or the
+	// limit is a suggestion), cpu.max as "<quota> <period>" via cpuMax,
+	// pids.max as a count. Zero means "no limit" and writes nothing.
+	// Tests: go test ./internal/cgroup/
+	return map[string]string{}
 }
 
 // controllers is the line for cgroup.subtree_control that switches on the

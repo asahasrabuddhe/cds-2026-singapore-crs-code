@@ -40,7 +40,6 @@ func Run(argv, env []string) (int, error) {
 	}
 	main := cmd.Process.Pid
 
-	// snippet:start init-loop
 	for sig := range sigs {
 		s, ok := sig.(syscall.Signal)
 		if !ok {
@@ -75,7 +74,6 @@ func Run(argv, env []string) (int, error) {
 			return code, nil
 		}
 	}
-	// snippet:end init-loop
 	return 0, errors.New("signal channel closed")
 }
 
@@ -98,25 +96,14 @@ func reapAll() {
 // reap collects every exited child. It reports the exit code of main and
 // done=true once main itself has been collected.
 func reap(main int) (code int, done bool, err error) {
-	// snippet:start reap
-	for {
-		var ws syscall.WaitStatus
-		pid, werr := syscall.Wait4(-1, &ws, syscall.WNOHANG, nil)
-		switch {
-		case werr == syscall.EINTR:
-			continue
-		case werr == syscall.ECHILD:
-			// Nothing left to wait for at all.
-			return code, done, nil
-		case werr != nil:
-			return 0, false, fmt.Errorf("wait4: %w", werr)
-		case pid == 0:
-			// Children exist but none has exited.
-			return code, done, nil
-		case pid == main:
-			code, done = ExitCode(ws), true
-		}
-		// Any other pid was an orphan: reaped, nothing to report.
+	// TODO(step 5): this waits for our own child and nobody else. An
+	// orphan re-parented to us is never collected and sits in the process
+	// table as a zombie. Loop on wait4(-1, WNOHANG) instead: any child,
+	// until there is nothing left, and remember main's exit code.
+	// Tests, on Linux: go test ./internal/initproc/
+	var ws syscall.WaitStatus
+	if _, err := syscall.Wait4(main, &ws, 0, nil); err != nil {
+		return 0, false, err
 	}
-	// snippet:end reap
+	return ExitCode(ws), true, nil
 }

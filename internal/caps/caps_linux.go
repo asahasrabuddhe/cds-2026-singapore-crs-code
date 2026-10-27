@@ -16,7 +16,6 @@ import (
 // has. It returns how many were dropped, for the verbose log on stage.
 func DropBounding(keep Set) (int, error) {
 	dropped := 0
-	// snippet:start capbset-drop
 	for _, c := range keep.ToDrop() {
 		_, _, errno := syscall.RawSyscall6(syscall.SYS_PRCTL, syscall.PR_CAPBSET_DROP, uintptr(c), 0, 0, 0, 0)
 		switch errno {
@@ -29,6 +28,5 @@ func DropBounding(keep Set) (int, error) {
 			return dropped, fmt.Errorf("prctl(PR_CAPBSET_DROP, %s): %w", Name(c), errno)
 		}
 	}
-	// snippet:end capbset-drop
 	return dropped, nil
 }
