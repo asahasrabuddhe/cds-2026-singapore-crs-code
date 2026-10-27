@@ -1,28 +1,12 @@
 // Package namespace names the seven Linux namespaces a container is made of
-// and turns a chosen set of them into clone(2) flags.
-//
-// The flag values are defined here rather than taken from package syscall,
-// because syscall only has them on Linux and this package has to compile,
-// and be tested, on the laptop the talk is written on. They are the
-// kernel's ABI and have not changed since each namespace was added; the
-// Linux-only test in this package checks them against the standard library
-// anyway.
+// and turns a chosen set of them into clone(2) flags, the syscall.CLONE_NEW*
+// constants.
 package namespace
 
 import (
 	"fmt"
 	"strings"
-)
-
-// Clone flags, from <linux/sched.h>.
-const (
-	CloneNewNS     uintptr = 0x00020000 // mount
-	CloneNewCgroup uintptr = 0x02000000 // cgroup root
-	CloneNewUTS    uintptr = 0x04000000 // hostname and domain name
-	CloneNewIPC    uintptr = 0x08000000 // System V IPC, POSIX message queues
-	CloneNewUser   uintptr = 0x10000000 // UIDs, GIDs, capabilities
-	CloneNewPID    uintptr = 0x20000000 // process IDs
-	CloneNewNet    uintptr = 0x40000000 // interfaces, routes, ports
+	"syscall"
 )
 
 // Set is the namespaces a container will be created in.
@@ -91,25 +75,25 @@ func Parse(s string) (Set, error) {
 func (s Set) CloneFlags() uintptr {
 	var f uintptr
 	if s.PID {
-		f |= CloneNewPID
+		f |= syscall.CLONE_NEWPID
 	}
 	if s.Mount {
-		f |= CloneNewNS
+		f |= syscall.CLONE_NEWNS
 	}
 	if s.UTS {
-		f |= CloneNewUTS
+		f |= syscall.CLONE_NEWUTS
 	}
 	if s.IPC {
-		f |= CloneNewIPC
+		f |= syscall.CLONE_NEWIPC
 	}
 	if s.Net {
-		f |= CloneNewNet
+		f |= syscall.CLONE_NEWNET
 	}
 	if s.User {
-		f |= CloneNewUser
+		f |= syscall.CLONE_NEWUSER
 	}
 	if s.Cgroup {
-		f |= CloneNewCgroup
+		f |= syscall.CLONE_NEWCGROUP
 	}
 	return f
 }

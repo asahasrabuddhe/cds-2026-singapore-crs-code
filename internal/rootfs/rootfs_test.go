@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -87,23 +88,23 @@ func TestPivotSequence(t *testing.T) {
 
 	want := []string{
 		// 1. Stop mount events leaking to the host, recursively.
-		fmt.Sprintf("mount  / %s %#x %q", "", MS_REC|MS_PRIVATE, ""),
+		fmt.Sprintf("mount  / %s %#x %q", "", syscall.MS_REC|syscall.MS_PRIVATE, ""),
 		// 2. pivot_root needs new_root to be a mount point. Bind it to itself.
-		fmt.Sprintf("mount %s %s %s %#x %q", dir, dir, "", MS_BIND|MS_REC, ""),
+		fmt.Sprintf("mount %s %s %s %#x %q", dir, dir, "", syscall.MS_BIND|syscall.MS_REC, ""),
 		// 3. A fresh /proc, or ps inside reads the host's process table.
-		fmt.Sprintf("mount proc %s/proc proc %#x %q", dir, MS_NOEXEC|MS_NOSUID|MS_NODEV, ""),
+		fmt.Sprintf("mount proc %s/proc proc %#x %q", dir, syscall.MS_NOEXEC|syscall.MS_NOSUID|syscall.MS_NODEV, ""),
 		// 4. An empty /dev, then the handful of nodes a shell expects, bound
 		//    from the host because mknod is refused in a user namespace.
-		fmt.Sprintf("mount tmpfs %s/dev tmpfs %#x %q", dir, MS_NOSUID|MS_STRICTATIME, "mode=755,size=65536k"),
-		fmt.Sprintf("mount /dev/null %s/dev/null  %#x %q", dir, MS_BIND, ""),
-		fmt.Sprintf("mount /dev/zero %s/dev/zero  %#x %q", dir, MS_BIND, ""),
-		fmt.Sprintf("mount /dev/full %s/dev/full  %#x %q", dir, MS_BIND, ""),
-		fmt.Sprintf("mount /dev/random %s/dev/random  %#x %q", dir, MS_BIND, ""),
-		fmt.Sprintf("mount /dev/urandom %s/dev/urandom  %#x %q", dir, MS_BIND, ""),
-		fmt.Sprintf("mount /dev/tty %s/dev/tty  %#x %q", dir, MS_BIND, ""),
+		fmt.Sprintf("mount tmpfs %s/dev tmpfs %#x %q", dir, syscall.MS_NOSUID|syscall.MS_STRICTATIME, "mode=755,size=65536k"),
+		fmt.Sprintf("mount /dev/null %s/dev/null  %#x %q", dir, syscall.MS_BIND, ""),
+		fmt.Sprintf("mount /dev/zero %s/dev/zero  %#x %q", dir, syscall.MS_BIND, ""),
+		fmt.Sprintf("mount /dev/full %s/dev/full  %#x %q", dir, syscall.MS_BIND, ""),
+		fmt.Sprintf("mount /dev/random %s/dev/random  %#x %q", dir, syscall.MS_BIND, ""),
+		fmt.Sprintf("mount /dev/urandom %s/dev/urandom  %#x %q", dir, syscall.MS_BIND, ""),
+		fmt.Sprintf("mount /dev/tty %s/dev/tty  %#x %q", dir, syscall.MS_BIND, ""),
 		// 5. /sys read-only, and the container's own cgroup under it.
-		fmt.Sprintf("mount sysfs %s/sys sysfs %#x %q", dir, MS_RDONLY|MS_NOSUID|MS_NODEV|MS_NOEXEC, ""),
-		fmt.Sprintf("mount cgroup2 %s/sys/fs/cgroup cgroup2 %#x %q", dir, MS_NOSUID|MS_NODEV|MS_NOEXEC, ""),
+		fmt.Sprintf("mount sysfs %s/sys sysfs %#x %q", dir, syscall.MS_RDONLY|syscall.MS_NOSUID|syscall.MS_NODEV|syscall.MS_NOEXEC, ""),
+		fmt.Sprintf("mount cgroup2 %s/sys/fs/cgroup cgroup2 %#x %q", dir, syscall.MS_NOSUID|syscall.MS_NODEV|syscall.MS_NOEXEC, ""),
 		// 6. The pivot itself, from inside new_root, with the old root parked
 		//    in a directory underneath it.
 		fmt.Sprintf("chdir %s", dir),
@@ -111,7 +112,7 @@ func TestPivotSequence(t *testing.T) {
 		"chdir /",
 		// 7. Detach the old root and delete the parking directory. From here
 		//    the host filesystem is unreachable.
-		fmt.Sprintf("unmount %s %#x", putOld, MNT_DETACH),
+		fmt.Sprintf("unmount %s %#x", putOld, syscall.MNT_DETACH),
 		fmt.Sprintf("remove %s", putOld),
 	}
 

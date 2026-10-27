@@ -3,8 +3,8 @@
 // this list: a process running as UID 0 with CAP_SYS_ADMIN removed from its
 // bounding set cannot mount, and no exec will ever give it back.
 //
-// The numbers are the kernel's, from <linux/capability.h>, and are defined
-// here so the package builds on any OS.
+// The numbers are the kernel's, from <linux/capability.h>. Package syscall
+// has no capability constants, so they are defined here.
 package caps
 
 import (

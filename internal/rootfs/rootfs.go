@@ -5,7 +5,7 @@
 // what the tests check.
 //
 // The mount syscalls sit behind the Mounter interface, so the sequence is
-// tested with a recorder on any OS. The Linux implementation is in
+// tested with a recorder, without root. The Linux implementation is in
 // rootfs_linux.go and is one line per method.
 package rootfs
 
@@ -14,21 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-)
-
-// Mount flags, from <linux/mount.h>. Defined here so the package builds
-// everywhere; the Linux test checks them against package syscall.
-const (
-	MS_RDONLY      uintptr = 0x1
-	MS_NOSUID      uintptr = 0x2
-	MS_NODEV       uintptr = 0x4
-	MS_NOEXEC      uintptr = 0x8
-	MS_BIND        uintptr = 0x1000
-	MS_REC         uintptr = 0x4000
-	MS_PRIVATE     uintptr = 0x40000
-	MS_STRICTATIME uintptr = 0x1000000
-
-	MNT_DETACH = 0x2
+	"syscall"
 )
 
 // putOld is where the old root is parked during the pivot, relative to the
@@ -113,31 +99,31 @@ func Pivot(m Mounter, dir string) error {
 		// systemd makes every mount shared by default, so this is not
 		// optional.
 		{"make / private", func() error {
-			return m.Mount("", "/", "", MS_REC|MS_PRIVATE, "")
+			return m.Mount("", "/", "", syscall.MS_REC|syscall.MS_PRIVATE, "")
 		}, false},
 		// pivot_root requires new_root to be a mount point. A directory is
 		// not one until it is bind-mounted onto itself.
 		{"bind rootfs to itself", func() error {
-			return m.Mount(dir, dir, "", MS_BIND|MS_REC, "")
+			return m.Mount(dir, dir, "", syscall.MS_BIND|syscall.MS_REC, "")
 		}, false},
 		// procfs is per PID namespace: mounted here, from inside the new PID
 		// namespace, it shows the container's processes and nothing else.
 		{"mount /proc", func() error {
-			return m.Mount("proc", filepath.Join(dir, "proc"), "proc", MS_NOEXEC|MS_NOSUID|MS_NODEV, "")
+			return m.Mount("proc", filepath.Join(dir, "proc"), "proc", syscall.MS_NOEXEC|syscall.MS_NOSUID|syscall.MS_NODEV, "")
 		}, false},
 		{"mount /dev", func() error {
-			return m.Mount("tmpfs", filepath.Join(dir, "dev"), "tmpfs", MS_NOSUID|MS_STRICTATIME, "mode=755,size=65536k")
+			return m.Mount("tmpfs", filepath.Join(dir, "dev"), "tmpfs", syscall.MS_NOSUID|syscall.MS_STRICTATIME, "mode=755,size=65536k")
 		}, false},
 		{"populate /dev", func() error { return populateDev(m, dir) }, false},
 		// Read-only, the way Docker mounts it. Writable sysfs is a way out.
 		{"mount /sys", func() error {
-			return m.Mount("sysfs", filepath.Join(dir, "sys"), "sysfs", MS_RDONLY|MS_NOSUID|MS_NODEV|MS_NOEXEC, "")
+			return m.Mount("sysfs", filepath.Join(dir, "sys"), "sysfs", syscall.MS_RDONLY|syscall.MS_NOSUID|syscall.MS_NODEV|syscall.MS_NOEXEC, "")
 		}, true},
 		// The container's own cgroup, seen from inside. With a cgroup
 		// namespace this is the container's leaf, so `cat
 		// /sys/fs/cgroup/memory.max` in here reads the limit set out there.
 		{"mount /sys/fs/cgroup", func() error {
-			return m.Mount("cgroup2", filepath.Join(dir, "sys", "fs", "cgroup"), "cgroup2", MS_NOSUID|MS_NODEV|MS_NOEXEC, "")
+			return m.Mount("cgroup2", filepath.Join(dir, "sys", "fs", "cgroup"), "cgroup2", syscall.MS_NOSUID|syscall.MS_NODEV|syscall.MS_NOEXEC, "")
 		}, true},
 		// snippet:start pivot
 		// pivot_root wants to be called from inside new_root, with put_old
@@ -148,7 +134,7 @@ func Pivot(m Mounter, dir string) error {
 		// The old root is still mounted at /.old_root and everything on
 		// the host is reachable through it. Detach it, then delete the
 		// directory so nothing even hints that it was there.
-		{"unmount old root", func() error { return m.Unmount(putOld, MNT_DETACH) }, false},
+		{"unmount old root", func() error { return m.Unmount(putOld, syscall.MNT_DETACH) }, false},
 		{"remove old root dir", func() error { return m.Remove(putOld) }, false},
 		// snippet:end pivot
 	}
@@ -175,7 +161,7 @@ func populateDev(m Mounter, dir string) error {
 			return err
 		}
 		_ = f.Close()
-		if err := m.Mount("/dev/"+name, target, "", MS_BIND, ""); err != nil {
+		if err := m.Mount("/dev/"+name, target, "", syscall.MS_BIND, ""); err != nil {
 			return fmt.Errorf("bind /dev/%s: %w", name, err)
 		}
 	}

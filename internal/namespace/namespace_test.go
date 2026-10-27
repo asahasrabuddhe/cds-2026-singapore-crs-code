@@ -1,6 +1,7 @@
 package namespace
 
 import (
+	"syscall"
 	"testing"
 )
 
@@ -50,9 +51,9 @@ func TestCloneFlags(t *testing.T) {
 		want uintptr
 	}{
 		{name: "nothing", set: Set{}, want: 0},
-		{name: "pid only", set: Set{PID: true}, want: CloneNewPID},
-		{name: "pid and mount", set: Set{PID: true, Mount: true}, want: CloneNewPID | CloneNewNS},
-		{name: "everything", set: All(), want: CloneNewPID | CloneNewNS | CloneNewUTS | CloneNewIPC | CloneNewNet | CloneNewUser | CloneNewCgroup},
+		{name: "pid only", set: Set{PID: true}, want: syscall.CLONE_NEWPID},
+		{name: "pid and mount", set: Set{PID: true, Mount: true}, want: syscall.CLONE_NEWPID | syscall.CLONE_NEWNS},
+		{name: "everything", set: All(), want: syscall.CLONE_NEWPID | syscall.CLONE_NEWNS | syscall.CLONE_NEWUTS | syscall.CLONE_NEWIPC | syscall.CLONE_NEWNET | syscall.CLONE_NEWUSER | syscall.CLONE_NEWCGROUP},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -60,30 +61,6 @@ func TestCloneFlags(t *testing.T) {
 				t.Errorf("got %#x, want %#x", got, tt.want)
 			}
 		})
-	}
-}
-
-// The flag values are the kernel's ABI and never change, but a typo in one
-// of them would produce a container that is silently less isolated than the
-// slide claims. Pin them.
-func TestCloneFlagValues(t *testing.T) {
-	tests := []struct {
-		name string
-		got  uintptr
-		want uintptr
-	}{
-		{"CLONE_NEWNS", CloneNewNS, 0x00020000},
-		{"CLONE_NEWCGROUP", CloneNewCgroup, 0x02000000},
-		{"CLONE_NEWUTS", CloneNewUTS, 0x04000000},
-		{"CLONE_NEWIPC", CloneNewIPC, 0x08000000},
-		{"CLONE_NEWUSER", CloneNewUser, 0x10000000},
-		{"CLONE_NEWPID", CloneNewPID, 0x20000000},
-		{"CLONE_NEWNET", CloneNewNet, 0x40000000},
-	}
-	for _, tt := range tests {
-		if tt.got != tt.want {
-			t.Errorf("%s = %#x, want %#x", tt.name, tt.got, tt.want)
-		}
 	}
 }
 
