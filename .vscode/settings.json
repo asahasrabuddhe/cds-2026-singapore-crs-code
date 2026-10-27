@@ -1,0 +1,8 @@
+{
+  // The runtime is Linux only. Your editor runs on macOS or Windows, so
+  // tell the Go tools to read the code as Linux, or every syscall.CLONE_*
+  // and every _linux.go file shows as an error.
+  "go.toolsEnvVars": {
+    "GOOS": "linux"
+  }
+}

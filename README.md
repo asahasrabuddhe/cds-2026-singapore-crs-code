@@ -16,45 +16,49 @@ The slides live in a sibling repository,
 
 ## Before the workshop
 
-Everyone works in the same Ubuntu VM, made with
-[Multipass](https://canonical.com/multipass) on Windows, macOS or Linux.
-[`docs/setup.md`](docs/setup.md) has the install for each. Do this before
-the day: forty-five minutes has no room for a VM install, and the image
-is a download.
+The code lives on your machine and you edit it there. A Multipass VM
+sees the same folder and runs it on a Linux kernel.
+[`docs/setup.md`](docs/setup.md) has the install for Windows, macOS and
+Linux. Do this before the day: forty-five minutes has no room for a VM
+install, and the image is a download.
 
 ```bash
 multipass launch 24.04 --name crs --cpus 2 --memory 4G --disk 20G --cloud-init https://raw.githubusercontent.com/asahasrabuddhe/cds-2026-singapore-crs-code/main/provision/user-data.yaml
+git clone https://github.com/asahasrabuddhe/cds-2026-singapore-crs-code.git crs
+multipass mount crs crs:/home/ubuntu/crs
 multipass shell crs
-git clone https://github.com/asahasrabuddhe/cds-2026-singapore-crs-code.git ~/crs
 cd ~/crs && ./scripts/check.sh
 ```
 
 When it prints `ready`, you are ready. The pre-flight also pulls the image
-every container runs, `ubuntu:26.04`, into `rootfs/ubuntu` with
-`img2rootfs`, so run it while you have network.
+every container runs, `ubuntu:26.04`, into
+`/var/lib/mycontainer/rootfs/ubuntu` on the VM's disk, so run it while
+you have network.
 
 ## In the workshop
 
 [`docs/workshop.md`](docs/workshop.md) is the plan: five steps, one per
 pillar, each with the file to edit, the test that tells you when you are
-done, and the command that shows it working. You work in
-`workshop/start/`, which is this runtime with the bodies of five functions
-replaced by `TODO(step N)` comments and the finished tests left in place.
+done, and the command that shows it working.
+
+- `main` is where you work: this runtime with the bodies of five
+  functions replaced by `TODO(step N)` comments and the finished tests
+  left in place.
+- `final` is the finished runtime: the reference for when you are stuck,
+  and what `scripts/demo.sh` runs.
 
 ```bash
-cd workshop/start
-make build rootfs
-go test ./...            # six packages fail on Linux. That is the syllabus.
+make build
+go test ./...            # on main, six packages fail. That is the syllabus.
 ```
-
-The repository root is the finished runtime, the reference for when you
-are stuck, and what `scripts/demo.sh` runs.
 
 ## The finished runtime
 
+On `final`:
+
 ```bash
 make build         # ./mycontainer and ./img2rootfs
-make rootfs        # pulls ubuntu:26.04 into rootfs/ubuntu; needs network
+make rootfs        # pulls ubuntu:26.04 into /var/lib/mycontainer/rootfs; needs network
 sudo ./mycontainer run ubuntu /bin/sh
 ```
 
@@ -69,7 +73,7 @@ sudo ./mycontainer run -caps default,+CAP_SYS_ADMIN ubuntu /bin/sh
 sudo ./mycontainer run -init=false ubuntu /bin/sleep 30       # sleep is PID 1, with everything that entails
 ./mycontainer run ubuntu /bin/sh -c id                        # rootless: uid 0 inside, you outside
 sudo ./mycontainer run -v ubuntu /bin/true                    # narrate every step
-./img2rootfs alpine:3.22                                              # any other image, then: run alpine ...
+make rootfs/alpine                                            # any other image, then: run alpine ...
 ```
 
 `scripts/demo.sh 1` to `7` are the demos, one per pillar, each independent.
@@ -98,18 +102,15 @@ internal/spec/         what the parent tells the child
 internal/cli/          flags to spec
 internal/container/    the parent and the child, wired together (Linux only)
 internal/image/        registry client and layer unpacking
-workshop/start/        the same program with the five bodies removed
-scripts/               demo.sh, check.sh, vm.sh
+scripts/               demo.sh, check.sh, vm.sh, and stub.py, which makes main from final
 provision/             one cloud-init file for every VM
 docs/                  setup, the workshop plan, one explainer per pillar
 ```
 
-Every package under `internal/` except `container` compiles and tests on
-macOS and Windows: the clone flags, mount flags and capability numbers are
-defined in Go rather than taken from package `syscall`, the pivot sequence
-runs against a recorder, and cgroup v2 is files, so a temp dir stands in
-for `/sys/fs/cgroup`. That is what lets the workshop's tests run on your
-laptop while the container itself needs the VM.
+The runtime is Linux only, and so is the code: the clone and mount flags
+come straight from package `syscall`. The tests still need no root and no
+containers: the pivot sequence runs against a recorder, and cgroup v2 is
+files, so a temp dir stands in for `/sys/fs/cgroup`.
 
 ## Tests
 

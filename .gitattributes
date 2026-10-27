@@ -1,0 +1,3 @@
+# The scripts run in the VM, from a folder that may have been cloned on
+# Windows. Keep every text file LF, or bash fails on the first CR.
+* text=auto eol=lf

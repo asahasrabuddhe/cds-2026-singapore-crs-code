@@ -10,30 +10,29 @@ There is no time in the room to install a VM. Do
 
 ## How it works
 
-Two copies of the same program are in this repository.
+The repository has two branches.
 
-- The root of the repository is the finished runtime. It is the reference,
-  the thing the demos run, and where you go when you are stuck.
-- `workshop/start/` is where you work. Same layout, same tests, with the
-  bodies of five functions replaced by a `TODO(step N)` comment. The tests
-  are the finished ones, so they fail until you make them pass.
+- `main` is where you work. It is the runtime with the bodies of five
+  functions replaced by a `TODO(step N)` comment. The tests are the
+  finished ones, so they fail until you make them pass.
+- `final` is the finished runtime. It is what the demos run, and the
+  answer when you are stuck.
 
-Six packages fail on Linux, five on a Mac. Five are the steps. The
-sixth is `cli`, whose tests use the capability set from step 4, and it
-goes green with that step. The init test only runs on Linux, which is the
-difference on a Mac.
+Six packages fail. Five are the steps. The sixth is `cli`, whose tests
+use the capability set from step 4, and it goes green with that step.
 
-Everything else in `workshop/start/` is done for you and is not the point
+Everything else on `main` is done for you and is not the point
 of the day: the flag parsing, the spec that the parent hands the child over
 a pipe, the re-exec through `/proc/self/exe`, the `mount` and `pivot_root`
 wrappers, the capability name table. Read it if you like. Write the five
 things below.
 
+In the VM:
+
 ```bash
-cd workshop/start
+cd ~/crs
 make build          # ./mycontainer, which runs a process with no costume yet
-make rootfs         # links rootfs/ubuntu, pulled by the pre-flight before the day
-go test ./...       # six packages fail on Linux. That is the syllabus.
+go test ./...       # six packages fail. That is the syllabus.
 ```
 
 ## The steps
@@ -50,14 +49,15 @@ go test ./...       # six packages fail on Linux. That is the syllabus.
 | At home | Rootless | `container_linux.go` | | `./mycontainer run` without sudo prints `uid=0` |
 
 Each step below says what to write, what the test wants, and what to run
-to see it. The finished version is in the same file at the repository root.
-Copying it is allowed; understanding why it is in that order is the point.
+to see it. The finished version is the same file on `final`. Copying it is
+allowed; understanding why it is in that order is the point.
 
 ### Step 1: namespaces, what it can see
 
 `CloneFlags()` in `internal/namespace/namespace.go` turns the set of
-namespaces into the flags for `clone(2)`. One bit per namespace, constants
-at the top of the file. Then in `internal/container/container_linux.go`,
+namespaces into the flags for `clone(2)`: one bit per namespace,
+`syscall.CLONE_NEWPID` and its six siblings. The PID one is written for
+you. Then in `internal/container/container_linux.go`,
 `sysProcAttr` needs `Cloneflags` set from it.
 
 ```go
@@ -210,18 +210,16 @@ the host says `Uid: 1000`. Both true. Where that leads, `/etc/subuid`,
 
 ## If you fall behind
 
-Copy the finished file over yours. Every step's file at the repository
-root is the answer, with the comments that explain it:
+Take the finished file from `final`. Every step's file there is the
+answer, with the comments that explain it. On your machine, in the `crs`
+folder:
 
 ```bash
-cp ../../internal/rootfs/rootfs.go internal/rootfs/rootfs.go
+git diff main origin/final -- internal/rootfs/rootfs.go
+git restore --source origin/final internal/rootfs/rootfs.go
 ```
+
+The first shows the answer; the second takes it.
 
 Then `go test ./internal/rootfs/` is green and you carry on with the next
 step. Nobody is keeping score.
-
-## If a test passes on your laptop and the container does not run
-
-The pure packages test on macOS; the container only runs on Linux.
-`make build` on a Mac produces a binary that says so. Everything in the
-checkpoints runs inside the VM from `docs/setup.md`.

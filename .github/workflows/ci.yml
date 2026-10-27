@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, final]
 
 # Nothing here writes back to the repository.
 permissions:
@@ -37,14 +37,12 @@ jobs:
       - name: shellcheck
         run: shellcheck scripts/*.sh
 
-  # The pure packages, on the two operating systems people write this on.
-  # Everything that touches the kernel is build-tagged linux and only
-  # compiled here; the macOS job proves the split is honest.
+  # final is the finished runtime and every test passes. main is the
+  # workshop, with five bodies stubbed, and exactly the six packages the
+  # steps cover fail: any other result means scripts/stub.py and the tests have
+  # drifted apart.
   test:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -53,12 +51,25 @@ jobs:
         with:
           go-version: "1.27"
       - run: go build ./...
-      - run: go test ./...
+      - name: go test, all green on final
+        if: ${{ (github.base_ref || github.ref_name) != 'main' }}
+        run: go test ./...
+      - name: go test, the six step packages fail on main
+        if: ${{ (github.base_ref || github.ref_name) == 'main' }}
+        run: |
+          got="$(go test ./... 2>&1 | awk '/^FAIL\t/ {print $2}' | sort | tr '\n' ' ')"
+          want="go.ajitem.com/cds-crs/internal/caps go.ajitem.com/cds-crs/internal/cgroup go.ajitem.com/cds-crs/internal/cli go.ajitem.com/cds-crs/internal/initproc go.ajitem.com/cds-crs/internal/namespace go.ajitem.com/cds-crs/internal/rootfs "
+          if [ "$got" != "$want" ]; then
+            echo "failing: $got"
+            echo "want:    $want"
+            exit 1
+          fi
 
   # Real containers, as root, on the runner's own kernel. The runner is
   # Ubuntu on cgroup v2, the same shape as the workshop VM once it has the
   # one sysctl that provision/user-data.yaml writes.
   test-root:
+    if: ${{ (github.base_ref || github.ref_name) != 'main' }}
     runs-on: ubuntu-latest
     needs: test
     steps:

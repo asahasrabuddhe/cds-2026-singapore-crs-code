@@ -1,30 +1,23 @@
-"""Rebuild workshop/start from the finished runtime at the repository root.
+"""Make the workshop branch from the finished runtime.
 
-workshop/start is the same program with the bodies of five functions
-replaced by TODO(step N) comments, so attendees write them and the
-finished tests tell them when they are done. Run this after any change to
-the runtime, from the repository root:
+The final branch is the finished runtime. main, where the room works, is
+the same tree with the bodies of five functions replaced by TODO(step N)
+comments, so attendees write them and the finished tests tell them when
+they are done. After any change on final, bring main up to date:
 
-    python3 workshop/stub.py
+    git switch main
+    git restore --source final --staged --worktree .
+    python3 scripts/stub.py
+    git commit -am "Bring main up to date with final"
 
-It copies cmd/mycontainer and internal/ (less the image puller, which the
-workshop does not touch), replaces the five bodies, and strips the
-slides' snippet anchors, which belong to the finished code.
+It stubs the five bodies in place and strips the snippet anchors, which
+belong to the finished code. Running it twice changes nothing.
 """
 import pathlib
 import re
-import shutil
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-START = ROOT / 'workshop' / 'start'
-
-
-def copy():
-    for d in ['cmd', 'internal']:
-        shutil.rmtree(START / d, ignore_errors=True)
-    shutil.copytree(ROOT / 'cmd' / 'mycontainer', START / 'cmd' / 'mycontainer')
-    shutil.copytree(ROOT / 'internal', START / 'internal',
-                    ignore=shutil.ignore_patterns('image'))
+START = ROOT
 
 
 def replace_body(rel, signature, body):
@@ -40,9 +33,14 @@ def replace_body(rel, signature, body):
 def stub():
     replace_body('internal/namespace/namespace.go',
                  'func (s Set) CloneFlags() uintptr {',
-                 '''	// TODO(step 1): one bit per namespace that is on. The constants are
-	// at the top of this file. Tests: go test ./internal/namespace/
-	return 0''')
+                 '''	var f uintptr
+	if s.PID {
+		f |= syscall.CLONE_NEWPID
+	}
+	// TODO(step 1): the other six, the same way. Mount is
+	// syscall.CLONE_NEWNS; the rest are CLONE_NEW and their own name.
+	// Tests: go test ./internal/namespace/
+	return f''')
 
     p = START / 'internal/rootfs/rootfs.go'
     s = p.read_text()
@@ -130,8 +128,7 @@ def strip_anchors():
 
 
 if __name__ == '__main__':
-    copy()
     stub()
     strip_anchors()
     n = sum(f.read_text().count('TODO(step') for f in START.rglob('*.go'))
-    print(f'workshop/start rebuilt: {n} TODO(step) markers')
+    print(f'stubbed: {n} TODO(step) markers')

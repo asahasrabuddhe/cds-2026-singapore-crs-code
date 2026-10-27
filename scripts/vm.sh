@@ -3,12 +3,10 @@
 # vm.sh, the Linux box the runtime runs in.
 #
 # The same Multipass VM docs/setup.md has every attendee make, from
-# provision/user-data.yaml, with this repository cloned from GitHub onto
-# its own disk at ~/crs. Nothing is shared with the host, so what runs
-# here is what runs on every attendee's laptop. Commit and push from the
-# host, then `git pull` in the VM.
+# provision/user-data.yaml, with this checkout shared into it at ~/crs,
+# the way every attendee shares theirs. Edit here, run there.
 #
-#   ./scripts/vm.sh up [name]        create, provision and clone
+#   ./scripts/vm.sh up [name]        create, provision and share this checkout
 #   ./scripts/vm.sh shell [name]     a login shell, in ~/crs
 #   ./scripts/vm.sh status
 #   ./scripts/vm.sh down [name]      delete
@@ -18,7 +16,6 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 readonly USER_DATA="provision/user-data.yaml"
-readonly REPO_URL="https://github.com/asahasrabuddhe/cds-2026-singapore-crs-code.git"
 readonly ACTION="${1:-status}"
 readonly NAME="${2:-crs}"
 
@@ -55,7 +52,9 @@ case "$ACTION" in
         --cloud-init "$USER_DATA"
     fi
     wait_provisioned
-    multipass exec "$NAME" -- bash -c "test -d ~/crs || git clone -q $REPO_URL ~/crs"
+    if ! multipass info "$NAME" | grep -q '=> /home/ubuntu/crs$'; then
+      multipass mount "$PWD" "$NAME:/home/ubuntu/crs"
+    fi
     echo "then: ./scripts/vm.sh shell $NAME"
     ;;
   shell)  exec multipass exec "$NAME" -- bash -lc 'cd ~/crs && exec bash -l' ;;
