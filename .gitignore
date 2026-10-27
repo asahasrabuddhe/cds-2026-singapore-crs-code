@@ -3,9 +3,13 @@
 /mycontainer
 /img2rootfs
 
-# Root filesystems built by scripts/rootfs.sh or cmd/img2rootfs. Large,
-# and rebuilt in seconds.
+# Where images lived before they moved to /var/lib/mycontainer/rootfs,
+# in case an old clone still has them.
 /rootfs/
+
+# A folder shared into the VM keeps a file deleted while open under this
+# name until it is closed.
+.fuse_hidden*
 
 # The multipass client caches its update check in the working directory.
 /network-cache/

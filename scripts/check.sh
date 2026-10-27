@@ -6,7 +6,7 @@
 #   ./scripts/check.sh
 #
 # It checks the box, pulls the image if it is missing, and runs one
-# container with the finished runtime.
+# process through the runtime, on main or on final.
 
 set -uo pipefail
 
@@ -107,17 +107,19 @@ fi
 
 # ---------------------------------------------------------------- the image ---
 
-if [[ -x rootfs/ubuntu/bin/bash ]]; then
-  ok "rootfs/ubuntu is there"
-elif make -s rootfs >/dev/null 2>&1 && [[ -x rootfs/ubuntu/bin/bash ]]; then
-  ok "rootfs/ubuntu pulled"
+# Images live on the VM's disk, not in the repository; see the Makefile.
+img=/var/lib/mycontainer/rootfs/ubuntu
+if [[ -x $img/bin/bash ]]; then
+  ok "$img is there"
+elif make -s rootfs >/dev/null 2>&1 && [[ -x $img/bin/bash ]]; then
+  ok "$img pulled"
 else
-  fail "could not pull rootfs/ubuntu" "make rootfs, with network"
+  fail "could not pull $img" "make rootfs, with network"
 fi
 
-if [[ -d rootfs/ubuntu && "$(stat -c %u rootfs/ubuntu)" != "$(id -u)" ]]; then
-  fail "rootfs/ubuntu belongs to uid $(stat -c %u rootfs/ubuntu), not you" \
-    "pull it as yourself, not with sudo: rm -rf rootfs && make rootfs"
+if [[ -d $img && "$(stat -c %u $img)" != "$(id -u)" ]]; then
+  fail "$img belongs to uid $(stat -c %u $img), not you" \
+    "pull it as yourself, not with sudo: sudo rm -rf $img && make rootfs"
 fi
 
 # ---------------------------------------------------------------- the code ---
@@ -125,7 +127,9 @@ fi
 if [[ -d cmd/mycontainer ]]; then
   if go build -o mycontainer ./cmd/mycontainer 2>/tmp/crs-build.log; then
     ok "mycontainer builds"
-    if out="$(sudo -n ./mycontainer run ubuntu /bin/true 2>&1)"; then
+    # No namespaces, so this passes on main before any step is written:
+    # it checks the box, not the steps. The tests check the steps.
+    if out="$(sudo -n ./mycontainer run -ns none ubuntu /bin/true 2>&1)"; then
       ok "a container runs"
     else
       fail "the smoke-test container did not run" "$out"

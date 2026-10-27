@@ -20,8 +20,8 @@ import (
 // Usage is printed on -h and on a bad invocation.
 const Usage = `usage: mycontainer run [flags] <image> <command> [args...]
 
-Runs <command> as a container in rootfs/<image>, or in a directory if
-<image> has a slash in it.
+Runs <command> as a container in /var/lib/mycontainer/rootfs/<image>, or
+in a directory if <image> has a slash in it.
 
 flags:
   -ns pid,mnt,uts,ipc,net,cgroup
@@ -96,11 +96,11 @@ func ParseRun(args []string, rootless bool) (spec.Spec, error) {
 	}
 
 	var err error
-	// A bare name is an image under rootfs/, where make rootfs pulls it;
+	// A bare name is an image in spec.ImageDir, where make rootfs pulls it;
 	// anything with a slash in it is a path.
 	root := rest[0]
 	if !strings.ContainsRune(root, '/') {
-		root = filepath.Join("rootfs", root)
+		root = filepath.Join(spec.ImageDir, root)
 	}
 	if s.Rootfs, err = filepath.Abs(root); err != nil {
 		return spec.Spec{}, err

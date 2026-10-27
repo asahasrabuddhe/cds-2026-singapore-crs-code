@@ -19,6 +19,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"go.ajitem.com/cds-crs/internal/spec"
 )
 
 var repo, binary string
@@ -33,7 +35,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	binary = filepath.Join(repo, "mycontainer")
-	for _, p := range []string{binary, filepath.Join(repo, "rootfs", "ubuntu", "bin", "bash")} {
+	for _, p := range []string{binary, filepath.Join(spec.ImageDir, "ubuntu", "bin", "bash")} {
 		if _, err := os.Stat(p); err != nil {
 			println("missing", p, "- run make build rootfs first")
 			os.Exit(1)
@@ -47,7 +49,7 @@ type result struct {
 	code           int
 }
 
-// run executes mycontainer from the repository root, where rootfs/ lives.
+// run executes mycontainer from the repository root.
 func run(t *testing.T, args ...string) result {
 	t.Helper()
 	cmd := exec.Command(binary, args...)

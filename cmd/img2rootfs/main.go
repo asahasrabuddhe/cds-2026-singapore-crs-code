@@ -1,7 +1,7 @@
 // img2rootfs: pull an image from a registry and unpack it into a directory
 // that mycontainer can use as a root filesystem.
 //
-//	img2rootfs alpine:3.22                 # writes rootfs/alpine
+//	img2rootfs alpine:3.22                 # writes /var/lib/mycontainer/rootfs/alpine
 //	img2rootfs -o /tmp/ubuntu ubuntu:26.04
 //
 // No Docker daemon, no containerd, no library: the registry protocol is
@@ -21,10 +21,11 @@ import (
 	"time"
 
 	"go.ajitem.com/cds-crs/internal/image"
+	"go.ajitem.com/cds-crs/internal/spec"
 )
 
 func main() {
-	out := flag.String("o", "", "output directory (default rootfs/<image name>)")
+	out := flag.String("o", "", "output directory (default /var/lib/mycontainer/rootfs/<image name>)")
 	arch := flag.String("arch", runtime.GOARCH, "architecture to pull")
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "usage: img2rootfs [-o dir] [-arch arm64|amd64] <image>")
@@ -43,7 +44,7 @@ func main() {
 	}
 	dest := *out
 	if dest == "" {
-		dest = filepath.Join("rootfs", ref.Name())
+		dest = filepath.Join(spec.ImageDir, ref.Name())
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)

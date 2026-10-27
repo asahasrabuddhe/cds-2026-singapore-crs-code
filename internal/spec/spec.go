@@ -19,6 +19,13 @@ import (
 	"go.ajitem.com/cds-crs/internal/namespace"
 )
 
+// ImageDir is where `mycontainer run <image>` looks for an image given by
+// name, and where make rootfs pulls them. It is on the VM's own disk rather
+// than in the repository, because the repository may be a folder shared from
+// the host, and an image unpacked there loses its symlinks and owners.
+// A variable, so the tests can point it somewhere else.
+var ImageDir = "/var/lib/mycontainer/rootfs"
+
 // Spec is everything the child needs to become a container.
 type Spec struct {
 	ID         string        `json:"id"`

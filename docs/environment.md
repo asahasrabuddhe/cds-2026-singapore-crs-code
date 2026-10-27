@@ -16,7 +16,7 @@ this repository is more than a few months old.
 | Distribution | Ubuntu 24.04.5 LTS | `lsb_release -d` |
 | Kernel | 6.8.0-147-generic, aarch64 | `uname -rm` |
 | Go | 1.27.1 | `go version` |
-| Image | `ubuntu:26.04` | `make rootfs`; `head -1 rootfs/ubuntu/etc/os-release` |
+| Image | `ubuntu:26.04` | `make rootfs`; `head -1 /var/lib/mycontainer/rootfs/ubuntu/etc/os-release` |
 | strace | 6.8 | `strace -V` |
 | uidmap (shadow) | 1:4.13+dfsg1-4ubuntu3.2 | `dpkg -s uidmap` |
 
@@ -75,8 +75,9 @@ instruction.
 
 ## The mount table
 
-The repository is cloned onto the VM's own disk, so `rootfs/ubuntu` is an
-ordinary ext4 directory. Inside a container, `mount` lists its root as
+The image lives on the VM's own disk, so
+`/var/lib/mycontainer/rootfs/ubuntu` is an ordinary ext4 directory, even
+though the repository is a folder shared from the host. Inside a container, `mount` lists its root as
 `/dev/sda1 on / type ext4`: the root is a bind mount of that directory,
 and the device nodes in `/dev` are bind mounts of the VM's. Every other
 mount the VM has is gone.

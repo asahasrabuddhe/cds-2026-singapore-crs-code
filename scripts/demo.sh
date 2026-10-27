@@ -2,9 +2,9 @@
 #
 # demo.sh, the demo driver for "Building a Container Runtime from Scratch".
 #
-# It drives the finished runtime at the repository root, where every piece
-# is a flag. The workshop itself happens in workshop/start; docs/workshop.md
-# is the plan.
+# It drives the finished runtime, on the final branch, where every piece
+# is a flag. The workshop itself happens on main; docs/workshop.md is the
+# plan.
 #
 # One beat per pillar, each independent and repeatable. Every command the
 # audience sees is echoed before it runs, so the terminal reads as a
@@ -78,7 +78,7 @@ need_build() {
     echo "not built: make build" >&2
     exit 1
   fi
-  if [[ ! -x "rootfs/$IMAGE/bin/bash" ]]; then
+  if [[ ! -x "/var/lib/mycontainer/rootfs/$IMAGE/bin/bash" ]]; then
     echo "no rootfs: make rootfs" >&2
     exit 1
   fi

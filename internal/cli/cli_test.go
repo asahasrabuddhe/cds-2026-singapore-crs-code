@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"go.ajitem.com/cds-crs/internal/namespace"
+	"go.ajitem.com/cds-crs/internal/spec"
 )
 
 func TestParseRunDefaults(t *testing.T) {
@@ -131,7 +132,10 @@ func TestParseRunNoHostnameWithoutUTS(t *testing.T) {
 func TestParseRunResolvesTheRootfs(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
-	for _, d := range []string{"rootfs/ubuntu", "mine"} {
+	old := spec.ImageDir
+	spec.ImageDir = filepath.Join(dir, "images")
+	t.Cleanup(func() { spec.ImageDir = old })
+	for _, d := range []string{"images/ubuntu", "mine"} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -140,8 +144,8 @@ func TestParseRunResolvesTheRootfs(t *testing.T) {
 		arg  string
 		want string
 	}{
-		// A bare name is an image under rootfs/.
-		{"ubuntu", "rootfs/ubuntu"},
+		// A bare name is an image in spec.ImageDir.
+		{"ubuntu", "images/ubuntu"},
 		// Anything with a slash is a path.
 		{"./mine", "mine"},
 		{filepath.Join(dir, "mine"), "mine"},
