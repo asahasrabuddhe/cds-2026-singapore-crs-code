@@ -85,6 +85,37 @@ shows up as an error.
 - **Anything else.** Set `GOOS=linux` for `gopls`, or edit without it:
   the compiler that matters runs in the VM.
 
+## 6. Pull an image, and look inside
+
+A container image is a directory tree. `img2rootfs`, in this repository,
+pulls one from a registry and unpacks it, with nothing but Go's standard
+library. `make build` builds it. In the VM, in `~/crs`:
+
+```bash
+./img2rootfs alpine:3.22
+ls /var/lib/mycontainer/rootfs/alpine
+cat /var/lib/mycontainer/rootfs/alpine/etc/os-release
+```
+
+It writes `/var/lib/mycontainer/rootfs/<name>`, which is where
+`mycontainer run <name>` looks. `-o` puts it somewhere else, and `-arch
+amd64` or `-arch arm64` pulls an architecture other than the VM's. `make
+rootfs-all` pulls six more distributions.
+
+Then step inside it with `chroot`, the oldest isolation Linux has:
+
+```bash
+sudo chroot /var/lib/mycontainer/rootfs/alpine /bin/sh
+cat /etc/alpine-release; ps; hostname; exit
+```
+
+`/` is Alpine, and that is all that changed. `ps` prints nothing, because
+`/proc` in the image is an empty directory. The hostname is the VM's, and
+you are still root with every power root has. The workshop turns this
+into a container: its own processes and hostname in step 1, a real root
+with its own `/proc` in step 2, limits in step 3, less power in step 4,
+and an init in step 5.
+
 ## In the workshop
 
 Edit on your machine. Keep one terminal in the VM, `multipass shell crs`
